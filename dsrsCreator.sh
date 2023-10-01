@@ -63,6 +63,7 @@ dsAmCtsSes="--profile am-cts --set am-cts/amCtsAdminPassword:5up35tr0ng --set am
 dsAmCtsDs="--profile am-cts --set am-cts/amCtsAdminPassword:5up35tr0ng --set am-cts/tokenExpirationPolicy:ds "
 dsAmConfig="--profile am-config --set am-config/amConfigAdminPassword:5up35tr0ng "
 dsAmIdentities="--profile am-identity-store --set am-identity-store/amIdentityStoreAdminPassword:5up35tr0ng "
+idmRepo="--profile idm-repo --set idm-repo/domain:forgerock.com "
 
 #Default installation profile
 installationProfile=$dsEval
@@ -132,10 +133,96 @@ fi
 printf "\n"
 }
 
+
+sselectedFamilyVersion()
+{
+  family=$1
+  version=$2
+  if [[ $family -eq 1 ]]; then
+    case "$version" in
+      1) selectedVersion=DS-5.0.0.zip
+         ;;
+      2) selectedVersion=DS-5.5.0.zip
+         ;;
+      3) selectedVersion=DS-5.5.1.zip
+         ;;
+      4) selectedVersion=DS-5.5.2.zip
+         ;;
+      5) selectedVersion=DS-5.5.3.zip
+         ;;
+      6) selectedVersion=DS-6.0.0.zip
+         ;;
+      7) selectedVersion=DS-6.5.0.zip
+         ;;
+      8) selectedVersion=DS-6.5.1.zip
+         ;;
+      9) selectedVersion=DS-6.5.2.zip
+         ;;
+      10) selectedVersion=DS-6.5.3.zip
+         ;;
+      11) selectedVersion=DS-6.5.4.zip
+         ;;
+      12) selectedVersion=DS-6.5.5.zip
+         ;;
+      13) selectedVersion=DS-6.5.6.zip
+         ;;
+      *)
+    esac
+ fi
+
+ if [[ $family -eq 2 ]]; then
+   case "$version" in
+     1) selectedVersion=DS-7.0.0.zip
+        ;;
+     2) selectedVersion=DS-7.0.1.zip
+        ;;
+     3) selectedVersion=DS-7.0.2.zip
+        ;;
+     4) selectedVersion=DS-7.1.0.zip
+        ;;
+     5) selectedVersion=DS-7.1.1.zip
+        ;;
+     6) selectedVersion=DS-7.1.2.zip
+        ;;
+     7) selectedVersion=DS-7.1.3.zip
+        ;;
+     8) selectedVersion=DS-7.1.4.zip
+        ;;
+     9) selectedVersion=DS-7.1.5.zip
+        ;;
+     10) selectedVersion=DS-7.1.6.zip
+        ;;
+     *)
+   esac
+ fi
+
+ if [[ $family -eq 3 ]]; then
+   case "$version" in
+     1) selectedVersion=DS-7.2.0.zip
+        ;;
+     2) selectedVersion=DS-7.2.1.zip
+        ;;
+     3) selectedVersion=DS-7.2.2.zip
+        ;;
+     4) selectedVersion=DS-7.2.3.zip
+        ;;
+     5) selectedVersion=DS-7.3.0.zip
+        ;;
+     6) selectedVersion=DS-7.3.1.zip
+        ;;
+     7) selectedVersion=DS-7.3.2.zip
+        ;;
+     8) selectedVersion=DS-7.3.3.zip
+        ;;
+     *)
+   esac
+ fi
+}
+
 selectProfile()
 {
 profile=$1
-case "$1" in
+case "$profile" in
 1) installationProfile=$dsEval
    ;;
 2) installationProfile=$dsAmCtsAmReap
@@ -148,23 +235,13 @@ case "$1" in
    ;;
 6) installationProfile=$dsAmIdentities
    ;;
+7) installationProfile=$idmRepo
+   ;;
 *)
    ;;
 esac
 }
 
-selectVersion()
-{
-dsVersion=$1
-case "$1" in
-1) installationProfile=$dsEval
-   ;;
-2) installationProfile=$dsAmCtsAmReap
-   ;;
-*)
-   ;;
-esac
-}
 
 # Start
 #
@@ -172,25 +249,25 @@ esac
 #Check the number or replication servers to be installed
 #Max number is set to 8 (this number can be changed)
 #
-if [[ $noOfServers -lt 2 ]]
-then
-	printf "The number of servers joining replication must be more that 1!\nPlease execute the script with command line argument like ./repDS 3\nwhere 3 is the number of DS to deploy, min=2 max=8.\n"
-	tput cnorm
-	exit -1
-fi
-if [[ $noOfServers -gt 8 ]]
-then
-	printf "The number of installing servers will be very high and resources will be not enough!\n"
-	tput cnorm
-	exit -1
-fi
+#if [[ $noOfServers -lt 2 ]]
+#then
+#	printf "The number of servers joining replication must be more that 1!\nPlease execute the script with command line argument like ./repDS 3\nwhere 3 is the number of DS to deploy, min=2 max=8.\n"
+#	tput cnorm
+#	exit -1
+#fi
+#if [[ $noOfServers -gt 8 ]]
+#then
+#	printf "The number of installing servers will be very high and resources will be not enough!\n"
+#	tput cnorm
+#	exit -1
+#fi
 
 
 printf "      Topology Creator\n"
 printf "*****************************\n"
 printf "\n"
 
-printf "Please select DS family:\n"
+printf "  Please select DS family\n"
 printf "*****************************\n"
 printf "1. DS 5.x - DS 6.x\n"
 printf "2. DS 7.0.x - DS 7.1.x\n"
@@ -201,7 +278,7 @@ printf "\n"
 while [[ "$dsFamily" != "1" && "$dsFamily" != "2" && "$dsFamily" != "3" ]]
 do
 	clear
-  printf "Please select DS version:\n"
+  printf "  Please select DS family\n"
   printf "*****************************\n"
   printf "1. DS 5.x - DS 6.x\n"
   printf "2. DS 7.0.x - DS 7.1.x\n"
@@ -213,8 +290,8 @@ done
 clear
 
 case "$dsFamily" in
-1) printf "Please select DS version:\n"
-   printf "*************************\n"
+1) printf "Please select DS version\n"
+   printf "************************\n"
    printf "1. DS 5.0.0\n"
    printf "2. DS 5.5.0\n"
    printf "3. DS 5.5.1\n"
@@ -231,10 +308,11 @@ case "$dsFamily" in
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" && "$dsVersion" != "11" && "dsVersion" != "12" && "$dsVersion" != "13" ]]
+#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" && "$dsVersion" != "11" && "dsVersion" != "12" && "$dsVersion" != "13" ]]
+   while [[ $dsVersion -lt 1 && $dsVersion -gt 13 ]]
    do
       clear
-      printf "Please select DS version:\n"
+      printf "Please select DS version\n"
       printf "*************************\n"
       printf "1. DS 5.0.0\n"
       printf "2. DS 5.5.0\n"
@@ -253,8 +331,8 @@ case "$dsFamily" in
       read dsVersion
    done
    ;;
-2) printf "Please select DS version:\n"
-   printf "*************************\n"
+2) printf "Please select DS version\n"
+   printf "************************\n"
    printf "1. DS 7.0.0\n"
    printf "2. DS 7.0.1\n"
    printf "3. DS 7.0.2\n"
@@ -268,10 +346,11 @@ case "$dsFamily" in
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" ]]
+#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" ]]
+   while [[ $dsVersion -lt 1 && $dsVersion -gt 10 ]]
    do
      clear
-     printf "Please select DS version:\n"
+     printf "Please select DS version\n"
      printf "************************\n"
      printf "1. DS 7.0.0\n"
      printf "2. DS 7.0.1\n"
@@ -287,38 +366,62 @@ case "$dsFamily" in
      read dsVersion
   done
    ;;
+3) printf "Please select DS version\n"
+   printf "************************\n"
+   printf "1. DS 7.2.0\n"
+   printf "2. DS 7.2.1\n"
+   printf "3. DS 7.2.2\n"
+   printf "4. DS 7.2.3\n"
+   printf "5. DS 7.3.0\n"
+   printf "6. DS 7.3.1\n"
+   printf "7. DS 7.3.2\n"
+   printf "8. DS 7.3.3\n"
+   printf "Enter your choise: "
+   read dsVersion
+   printf "\n"
+#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "dsVersion" != "8" ]]
+   while [[ $dsVersion -lt 1 && $dsVersion -gt 8 ]]
+   do
+      clear
+      printf "Please select DS version\n"
+      printf "************************\n"
+      printf "1. DS 7.2.0\n"
+      printf "2. DS 7.2.1\n"
+      printf "3. DS 7.2.2\n"
+      printf "4. DS 7.2.3\n"
+      printf "5. DS 7.3.0\n"
+      printf "6. DS 7.3.1\n"
+      printf "7. DS 7.3.2\n"
+      printf "8. DS 7.3.3\n"
+      read dsVersion
+  done
+      ;;
 *)
    ;;
 esac
 
 
 
-
-
-
-
 printf "\n"
-
-
 
 #selectVersion $dsVersion
 #printf "Selection is:$dsVersion"
 clear
 
-printf "Select type of Servers:\n"
-printf "***********************\n"
-printf "1. Stand Alone DS RS\n"
-printf "2. Non Stand Alone DS/RS\n"
+printf "    Select type of Servers\n"
+printf "********************************\n"
+printf "1. Stand Alone DS RS servers\n"
+printf "2. Non Stand Alone DS RS servers\n"
 printf "Enter your choise: "
 read standAlone
 printf "\n"
 while [[ "$standAlone" != "1" && "$standAlone" != "2" ]]
 do
 	clear
-  printf "Select type of Servers:\n"
-  printf "***********************\n"
-  printf "1. Stand Alone DS RS\n"
-  printf "2. Non Stand Alone DS/RS\n"
+  printf "    Select type of Servers\n"
+  printf "*********************************\n"
+  printf "1. Stand Alone DS RS servers\n"
+  printf "2. Non Stand Alone DS RS servers\n"
   printf "Enter your choise: "
   read standAlone
 done
@@ -327,31 +430,31 @@ clear
 
 if [[ $standAlone -eq 1 ]]; then
 
-  printf "Select number of Servers:\n"
-  printf "*************************\n"
-  printf "Number of stand alone DS:"
+  printf " Select number of Servers\n"
+  printf "*****************************\n"
+  printf "Number of stand alone DS: "
   read dsNumber
   while [[ $dsNumber -lt 0 || $dsNumber -gt 8 ]]
   do
     clear
-    printf "Number of stand alone DS:"
+    printf "Number of stand alone DS: "
     read dsNumber
   done
 
 
-  printf "Number of stand alone RS:"
+  printf "Number of stand alone RS: "
   read rsNumber
   while [[ $rsNumber -lt 0 || $rsNumber -gt 8 ]]
   do
     clear
-    printf "Number of stand alone RS:"
+    printf "Number of stand alone RS: "
     read rsNumber
   done
 fi
 
 clear
 
-printf "Please select profile\n"
+printf "                 Please select profile\n"
 printf "***********************************************************\n"
 printf "1. Evaluation\n"
 printf "2. AM CTS (AM reaper manages all token expiration)\n"
@@ -363,11 +466,12 @@ printf "7. IDM Repository\n"
 printf "Enter your choise: "
 read dsProfile
 printf "\n"
-while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$dsProfile" != "3" && "$dsProfile" != "4" && "$dsProfile" != "5" && "$dsProfile" != "6" && "$dsProfile" != "7" ]]
+#while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$dsProfile" != "3" && "$dsProfile" != "4" && "$dsProfile" != "5" && "$dsProfile" != "6" && "$dsProfile" != "7" ]]
+while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
 do
 	clear
-	printf "Please select profile\n"
-	printf "***********************************************************\n"
+  printf "                 Please select profile\n"
+  printf "***********************************************************\n"
 	printf "1. Evaluation\n"
 	printf "2. AM CTS (AM reaper manages all token expiration)\n"
 	printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
@@ -376,11 +480,29 @@ do
 	printf "6. AM identities\n"
   printf "7. IDM Repository\n"
 	printf "Enter your choise: "
-        read dsProfile
+  read dsProfile
 done
 
-selectProfile $dsProfile
+if [[ $standAlone -eq 2 ]]; then
+  clear
+  printf "Select number of servers (1 - 8)\n"
+  printf "No: "
+  read noOfServers
+  while [[ $noOfServers -lt 1 && $noOfServers -gt 8 ]]
+  do
+    printf "Select number of servers (1 - 8)\n"
+    printf "No: "
+    read noOfServers
+  done
+fi
 
+sselectedFamilyVersion $dsFamily $dsVersion
+selectProfile $dsProfile
+printf "Selected dsVersion: $selectedVersion, selected ds profile: $installationProfile, selected ds/rs server No of DS: $dsNumber, No of RS: $rsNumber, total number of servers: $noOfServers"
+
+
+
+printf "\n"
 # check for Java environment
 #
 printf "Checking for Java environment..\n"
