@@ -186,11 +186,12 @@ then
 fi
 
 
-printf "Installing ($niOfServers) DS7 Replication Servers.....\n"
+printf "      Topology Creator\n"
+printf "*****************************\n"
 printf "\n"
 
 printf "Please select DS family:\n"
-printf "*************************\n"
+printf "*****************************\n"
 printf "1. DS 5.x - DS 6.x\n"
 printf "2. DS 7.0.x - DS 7.1.x\n"
 printf "3. DS 7.2.x - DS 7.3x and up\n"
@@ -201,7 +202,7 @@ while [[ "$dsFamily" != "1" && "$dsFamily" != "2" && "$dsFamily" != "3" ]]
 do
 	clear
   printf "Please select DS version:\n"
-  printf "*************************\n"
+  printf "*****************************\n"
   printf "1. DS 5.x - DS 6.x\n"
   printf "2. DS 7.0.x - DS 7.1.x\n"
   printf "3. DS 7.2.x - DS 7.3x and up\n"
@@ -209,7 +210,7 @@ do
   read dsFamily
 done
 
-
+clear
 
 case "$dsFamily" in
 1) printf "Please select DS version:\n"
@@ -232,7 +233,7 @@ case "$dsFamily" in
    printf "\n"
    while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" && "$dsVersion" != "11" && "dsVersion" != "12" && "$dsVersion" != "13" ]]
    do
-	    clear
+      clear
       printf "Please select DS version:\n"
       printf "*************************\n"
       printf "1. DS 5.0.0\n"
@@ -253,37 +254,37 @@ case "$dsFamily" in
    done
    ;;
 2) printf "Please select DS version:\n"
-  printf "*************************\n"
-  printf "1. DS 7.0.0\n"
-  printf "2. DS 7.0.1\n"
-  printf "3. DS 7.0.2\n"
-  printf "4. DS 7.1.0\n"
-  printf "5. DS 7.1.1\n"
-  printf "6. DS 7.1.2\n"
-  printf "7. DS 7.1.3\n"
-  printf "8. DS 7.1.4\n"
-  printf "9. DS 7.1.5\n"
-  printf "10. DS 7.1.6\n"
-  printf "Enter your choise: "
-  read dsVersion
-  printf "\n"
-  while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" ]]
-  do
-    clear
-    printf "Please select DS version:\n"
-    printf "*************************\n"
-    printf "1. DS 7.0.0\n"
-    printf "2. DS 7.0.1\n"
-    printf "3. DS 7.0.2\n"
-    printf "4. DS 7.1.0\n"
-    printf "5. DS 7.1.1\n"
-    printf "6. DS 7.1.2\n"
-    printf "7. DS 7.1.3\n"
-    printf "8. DS 7.1.4\n"
-    printf "9. DS 7.1.5\n"
-    printf "10. DS 7.1.6\n"
-    printf "Enter your choise: "
-    read dsVersion
+   printf "*************************\n"
+   printf "1. DS 7.0.0\n"
+   printf "2. DS 7.0.1\n"
+   printf "3. DS 7.0.2\n"
+   printf "4. DS 7.1.0\n"
+   printf "5. DS 7.1.1\n"
+   printf "6. DS 7.1.2\n"
+   printf "7. DS 7.1.3\n"
+   printf "8. DS 7.1.4\n"
+   printf "9. DS 7.1.5\n"
+   printf "10. DS 7.1.6\n"
+   printf "Enter your choise: "
+   read dsVersion
+   printf "\n"
+   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" ]]
+   do
+     clear
+     printf "Please select DS version:\n"
+     printf "************************\n"
+     printf "1. DS 7.0.0\n"
+     printf "2. DS 7.0.1\n"
+     printf "3. DS 7.0.2\n"
+     printf "4. DS 7.1.0\n"
+     printf "5. DS 7.1.1\n"
+     printf "6. DS 7.1.2\n"
+     printf "7. DS 7.1.3\n"
+     printf "8. DS 7.1.4\n"
+     printf "9. DS 7.1.5\n"
+     printf "10. DS 7.1.6\n"
+     printf "Enter your choise: "
+     read dsVersion
   done
    ;;
 *)
@@ -305,7 +306,7 @@ printf "\n"
 clear
 
 printf "Select type of Servers:\n"
-printf "**************************\n"
+printf "***********************\n"
 printf "1. Stand Alone DS RS\n"
 printf "2. Non Stand Alone DS/RS\n"
 printf "Enter your choise: "
@@ -315,7 +316,7 @@ while [[ "$standAlone" != "1" && "$standAlone" != "2" ]]
 do
 	clear
   printf "Select type of Servers:\n"
-  printf "***************************\n"
+  printf "***********************\n"
   printf "1. Stand Alone DS RS\n"
   printf "2. Non Stand Alone DS/RS\n"
   printf "Enter your choise: "
@@ -351,7 +352,7 @@ fi
 clear
 
 printf "Please select profile\n"
-printf "*********************\n"
+printf "***********************************************************\n"
 printf "1. Evaluation\n"
 printf "2. AM CTS (AM reaper manages all token expiration)\n"
 printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
@@ -366,7 +367,7 @@ while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$
 do
 	clear
 	printf "Please select profile\n"
-	printf "*********************\n"
+	printf "***********************************************************\n"
 	printf "1. Evaluation\n"
 	printf "2. AM CTS (AM reaper manages all token expiration)\n"
 	printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
