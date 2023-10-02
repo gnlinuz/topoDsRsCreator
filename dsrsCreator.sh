@@ -22,7 +22,7 @@ noOfServers=$1
 # you MUST change the below settings to meet your installation requirments!
 #
 #Destination path will be in the format /opt/ds7xRepl0, /opt/ds7xRepl1, /opt/ds7xRepl2, /opt/ds7xRepl3, /opt/ds7xReplx ...
-destPath=~/ds720RepTest
+destPath=~/dsrsTopo
 
 #DS version, if the verison is between 7.0.x and 7.1.x enter 1 else for ds version 7.2.x and on enter 2
 dsVersion=2
@@ -32,7 +32,7 @@ dsVersion=2
 standAlone=2
 
 #hostname will be in format rep0.example.com, rep1.example.com, rep2.example.com, repx.example.com
-hostName=rep
+hostName=ds
 domain=.example.com
 
 #serverId will be in the format MASTER0, MASTER1, MASTER2, MASTERx
@@ -78,7 +78,7 @@ binPath=$setupPath/bin/
 
 tput civis
 
-# Functions
+# ************************** Functions
 #
 progressBar()
 {
@@ -90,7 +90,6 @@ while ps |grep $! &>/dev/null; do
 done
 printf "\n"
 }
-
 
 
 unzipMessage()
@@ -221,29 +220,29 @@ sselectedFamilyVersion()
 
 selectProfile()
 {
-profile=$1
-case "$profile" in
-1) installationProfile=$dsEval
-   ;;
-2) installationProfile=$dsAmCtsAmReap
-   ;;
-3) installationProfile=$dsAmCtsSes
-   ;;
-4) installationProfile=$dsAmCtsDs
-   ;;
-5) installationProfile=$dsAmConfig
-   ;;
-6) installationProfile=$dsAmIdentities
-   ;;
-7) installationProfile=$idmRepo
-   ;;
-*)
-   ;;
-esac
+  profile=$1
+  case "$profile" in
+  1) installationProfile=$dsEval
+     ;;
+  2) installationProfile=$dsAmCtsAmReap
+     ;;
+  3) installationProfile=$dsAmCtsSes
+     ;;
+  4) installationProfile=$dsAmCtsDs
+     ;;
+  5) installationProfile=$dsAmConfig
+     ;;
+  6) installationProfile=$dsAmIdentities
+     ;;
+  7) installationProfile=$idmRepo
+     ;;
+  *)
+     ;;
+  esac
 }
 
 
-# Start
+# ************************** Start
 #
 
 #Check the number or replication servers to be installed
@@ -401,11 +400,7 @@ case "$dsFamily" in
 esac
 
 
-
 printf "\n"
-
-#selectVersion $dsVersion
-#printf "Selection is:$dsVersion"
 clear
 
 printf "    Select type of Servers\n"
@@ -454,37 +449,41 @@ fi
 
 clear
 
-printf "                 Please select profile\n"
-printf "***********************************************************\n"
-printf "1. Evaluation\n"
-printf "2. AM CTS (AM reaper manages all token expiration)\n"
-printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
-printf "4. AM CTS (DS manages all token expiration)\n"
-printf "5. AM Configuration\n"
-printf "6. AM identities\n"
-printf "7. IDM Repository\n"
-printf "Enter your choise: "
-read dsProfile
-printf "\n"
-#while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$dsProfile" != "3" && "$dsProfile" != "4" && "$dsProfile" != "5" && "$dsProfile" != "6" && "$dsProfile" != "7" ]]
-while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
-do
-	clear
+if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]] || [[ $dsFamily -gt 1 ]]; then
+
   printf "                 Please select profile\n"
   printf "***********************************************************\n"
-	printf "1. Evaluation\n"
-	printf "2. AM CTS (AM reaper manages all token expiration)\n"
-	printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
-	printf "4. AM CTS (DS manages all token expiration)\n"
-	printf "5. AM Configuration\n"
-	printf "6. AM identities\n"
+  printf "1. Evaluation\n"
+  printf "2. AM CTS (AM reaper manages all token expiration)\n"
+  printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
+  printf "4. AM CTS (DS manages all token expiration)\n"
+  printf "5. AM Configuration\n"
+  printf "6. AM identities\n"
   printf "7. IDM Repository\n"
-	printf "Enter your choise: "
+  printf "Enter your choise: "
   read dsProfile
-done
+  printf "\n"
+#while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$dsProfile" != "3" && "$dsProfile" != "4" && "$dsProfile" != "5" && "$dsProfile" != "6" && "$dsProfile" != "7" ]]
+  while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
+  do
+	   clear
+     printf "                 Please select profile\n"
+     printf "***********************************************************\n"
+	   printf "1. Evaluation\n"
+	   printf "2. AM CTS (AM reaper manages all token expiration)\n"
+	   printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
+	   printf "4. AM CTS (DS manages all token expiration)\n"
+	   printf "5. AM Configuration\n"
+	   printf "6. AM identities\n"
+     printf "7. IDM Repository\n"
+	   printf "Enter your choise: "
+     read dsProfile
+  done
+fi
+
 
 if [[ $standAlone -eq 2 ]]; then
-  clear
+
   printf "Select number of servers (1 - 8)\n"
   printf "No: "
   read noOfServers
@@ -545,7 +544,8 @@ checkPorts()
 {
  portCheck=$1
  noOfDS=$2
- for (( i=0; i<$noOfDS; i++ ))
+ printf "The number of servers is: $noOfDS\n"
+ for (( i = 0; i < $noOfDS; i++ ))
  do
    result=`lsof -nP -itcp:$portCheck -stcp:listen|grep "TCP" |awk {'print $9'}|cut -c3-|head -1`
    if [ "$result" == "$portCheck" ];then
@@ -585,9 +585,6 @@ do
 	printf "Checking protocol port: $j\n"
 	checkPorts $j $noOfServers
 done
-
-
-
 
 
 #Check for existing directories
@@ -661,7 +658,6 @@ done
 
 
 
-
 # Create deployment key
 #
 printf "creating DEPLOYMENT_KEY...please wait it might take some time..\n"
@@ -683,7 +679,6 @@ fi
 deploymentKey=$(cat $setupPath/DEPLOYMENT_KEY |awk '{ print $1 }')
 export deploymentKey
 printf "DEPLOYMENT_KEY: $deploymentKey\n"
-
 
 
 
@@ -711,8 +706,6 @@ fi
 
 done
 printf "insert hostNames into /etc/hosts..Done\n"
-
-
 
 
 
@@ -831,7 +824,6 @@ executeInstallation $ldapPort $ldapsPort $adminPort $replPort
 
 
 
-
 # starting DS servers
 #
 printf "Starting DS server$startServer\n"
@@ -840,7 +832,6 @@ do
 	$destPath${startServer}/opendj/bin/./start-ds
 	printf "Server$startServer started..Done\n\n\n"
 done
-
 
 
 
@@ -869,8 +860,6 @@ command='p=$1\nif [ "$p" = "start" ];then\n\tfor (( j=0; j<$Srv; j++ ))\n\tdo\n\
 
 printf "$command" >> $setupPath/srvDS.sh
 chmod 755 $setupPath/srvDS.sh
-
-
 
 
 
