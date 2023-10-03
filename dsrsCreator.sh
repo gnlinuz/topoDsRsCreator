@@ -1,19 +1,17 @@
 #!/bin/bash
-# Use this script to setup multiple DS 7.x.x servers in replication and initialize
+# This is a usiversal setup script for DS versios 5x 6X 7x
 #
-# Created on 08/Dec/2021
+# Created on 01/Oct/2023
 # Author = G.Nikolaidis
 # Version 1.00
 #
 # Before execuete the script make sure you have installed Java version 11 or later
-# the unzip and netstat utility
-# include the DS-7.x.x.zip in the same directory where you execute the script
+# the unzip and lsof utility
+# include the DS.zip in the same directory where you execute the script
 # chmod 755 the script to make it executable and execute it as root or sudo
-# execute with command line argument the number of DS to deploy: ./replDS 3
 
 
 clear
-#noOfServers=$1
 
 # **************************** SETTINGS ****************************************
 # !!! important !!!
@@ -22,26 +20,23 @@ clear
 #Destination path will be in the format /opt/ds7xRepl0, /opt/ds7xRepl1, /opt/ds7xRepl2, /opt/ds7xRepl3, /opt/ds7xReplx ...
 destPath=~/dsrsTopo
 
-#DS version, if the verison is between 7.0.x and 7.1.x enter 1 else for ds version 7.2.x and on enter 2
-dsVersion=2
-
-#Stand alone servers 1) for stand alone servers DS RS, 2) for DS/RS servers
-standAlone=2
-
-#hostname will be in format rep0.example.com, rep1.example.com, rep2.example.com, repx.example.com
+#hostname will be in format ds0.example.com, ds1.example.com, ds2.example.com, dsx.example.com
 hostName=ds
 domain=.example.com
 
 #serverId will be in the format MASTER0, MASTER1, MASTER2, MASTERx
 serverId=MASTER
 
+#password to be used for uid=admin for uid=Monitor cn=Directory Manager
+installationPassword=DrowssaP
+
 #installationProfile=ds-evaluation
 generateUsers=10000
 
 #change the name of the zip file to install
-#password to be used: Password1
+
 installationZipFile=DS-7.2.0.zip
-installationPassword=Password1
+
 
 #Default protocol ports to be used
 #on each additional server the port will be +1 ie. server0 ldapPort:1389, server1 ldapPort:1390, server2 ldapPort:1391 etc
@@ -72,8 +67,15 @@ binPath=$setupPath/bin/
 tput civis
 
 
+
+
+
+
+
 # ************************** FUNCTIONS *****************************************
-#
+# ******************************************************************************
+# ******************************************************************************
+# ******************************************************************************
 progressBar()
 {
 sleepTime=$1
@@ -396,7 +398,91 @@ insertHostNames()
 }
 
 
+# Execute setup for ds version 7x
+#
+execute7xSetup()
+{
+  ld=$1
+  lds=$2
+  adm=$3
+  rep=$4
+  repb=$4
+  noServers=$5
+  hName=$6
+  Domain=$7
+  dePath=$8
+  setupPass=$9
+  Key=$10
+  srvId=$11
+  setupProfile=$12
+  dFamily=$13
+
+  printf "executing DS ./setup command...\n"
+
+  for (( b=0; b<$noServers; b++ ))
+  do
+          bootStrapServers=$bootStrapServers" "--bootstrapReplicationServer" "$hName${b}$Domain:$repb
+          ((repb++))
+  done
+
+  if [ $dFamily -eq 2 ];then
+
+  	for (( i=0; i<$noServers; i++ ))
+  	do
+  		$dePath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $setupPass --monitorUserPassword $setupPass --deploymentKeyPassword $setupPass --deploymentKey $Key --enableStartTLS --ldapsPort $lds --hostName $hName${i}$Domain --serverId $srvId${i} --replicationPort $rep $bootStrapServers ${setupProfile} --acceptLicense 2>&1 >/dev/null &
+
+  		((ld++))
+  		((adm++))
+  		((lds++))
+  		((rep++))
+
+  		progressBar 2
+  		setupMessage
+
+  	done
+  fi
+
+  if [ $dFamily -eq 3 ];then
+  	for (( i=0; i<$noServers; i++ ))
+      do
+        $dePath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $setupPass --monitorUserPassword $setupPass --deploymentIdPassword $setupPass --deploymentId $Key --enableStartTLS --ldapsPort $lds --hostName $hName${i}$Domain --serverId $srvId${i} --replicationPort $rep $bootStrapServers ${setupProfile} --acceptLicense 2>&1 >/dev/null &
+
+        ((ld++))
+        ((adm++))
+        ((lds++))
+        ((rep++))
+
+        progressBar 2
+        setupMessage
+      done
+  fi
+}
+
+
+
+exportKey()
+{
+  sPath=$1
+  deploymentKey=$(cat $sPath/DEPLOYMENT_KEY |awk '{ print $1 }')
+  export deploymentKey
+  printf "DEPLOYMENT_KEY/ID: $deploymentKey\n"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ************************** MAIN **********************************************
+# ******************************************************************************
+# ******************************************************************************
 # ******************************************************************************
 
 printf "      Topology Creator\n"
@@ -688,14 +774,14 @@ checkUnzip
 
 # Check if DS-7.x.x.zip file exist on the directory
 #
-checkFileZip $installationZipFile
+checkFileZip $selectedVersion
 
 # Unzip files to directories
 #
 printf "Unzipping files to directories...\n"
 for (( dir=0; dir<$noOfServers; dir++ ))
 do
-        unzip $installationZipFile -d $destPath${dir} 2>&1 >/dev/null &
+        unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
         progressBar 0
         unzipMessage
 done
@@ -709,6 +795,7 @@ if [ $dsFamily -eq 2 ];then
 	$binPath./dskeymgr create-deployment-key --deploymentKeyPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
   commandResult=$?
   printMsg $commandResult
+  exportKey $setupPath
 fi
 
 if [ $dsFamily -eq 3 ];then
@@ -716,12 +803,12 @@ if [ $dsFamily -eq 3 ];then
   export installationPassword
 	$binPath./dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
   printMsg $commandResult
+  exportKey $setupPath
 fi
 
-deploymentKey=$(cat $setupPath/DEPLOYMENT_KEY |awk '{ print $1 }')
-export deploymentKey
-printf "DEPLOYMENT_KEY: $deploymentKey\n"
-
+printf "\n"
+printf "Check if variable deploymentKey is available: $deploymentKey"
+printf "\n"
 
 
 # Insert hostNames into /etc/hosts file
@@ -733,51 +820,53 @@ insertHostNames $noOfServers $hostName $domain
 
 installationText()
 {
-# Create INSTALLATION text
-#printf "Installation instructions..\n\n\n$setupCommand\n\n\n$setupCommand2\n\n\n$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" > $setupPath/INSTALLATION
-#
-#ldap ldaps admin replication replication port
-ldd=$1
-ldss=$2
-admm=$3
-repp=$4
-repbb=$4
+  # Create INSTALLATION text
+  #printf "Installation instructions..\n\n\n$setupCommand\n\n\n$setupCommand2\n\n\n$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" > $setupPath/INSTALLATION
+  #
+  #ldap ldaps admin replication replication port
+  ldd=$1
+  ldss=$2
+  admm=$3
+  repp=$4
+  repbb=$4
 
-printf "Installation instructions..\n\n\n" > $setupPath/INSTALLATION
+  printf "Installation instructions..\n\n\n" > $setupPath/INSTALLATION
 
-for (( b=0; b<$noOfServers; b++ ))
-do
+  for (( b=0; b<$noOfServers; b++ ))
+  do
         bootStrapSrv="$bootStrapSrv--bootstrapReplicationServer $hostName${b}$domain:$repbb\n"
         ((repbb++))
-done
+  done
 
-if [ $dsVersion -eq 1 ];then
-	for (( i=0; i<$noOfServers; i++ ))
-	do
-		setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile}  \ \n--acceptLicense"
+  if [ $dsFamily -eq 2 ];then
+	   for (( i=0; i<$noOfServers; i++ ))
+	   do
+		     setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile}  \ \n--acceptLicense"
 
-		printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
-		((ldd++))
-		((admm++))
-		((ldss++))
-		((repp++))
-	done
-else
-	for (( i=0; i<$noOfServers; i++ ))
-        do
-                setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile} \ \n--acceptLicense"
+		     printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
+		     ((ldd++))
+		     ((admm++))
+		     ((ldss++))
+		     ((repp++))
+	   done
+  fi
 
-                printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
-                ((ldd++))
-                ((admm++))
-                ((ldss++))
-                ((repp++))
-        done
-fi
+  if [ $dsFamily -eq 3 ];then
+	   for (( i=0; i<$noOfServers; i++ ))
+     do
+       setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile} \ \n--acceptLicense"
 
-s=0
-initReplication="$binPath./dsrepl initialize \\n--baseDN dc=example,dc=com \\n--toAllServers \\n--hostname $hostName${s}$domain \\n--port $adminPort \\n--bindDN "uid=admin" \\n--bindPassword $installationPassword \\n--trustStorePath $setupPath/config/keystore \\n--trustStorePasswordFile $setupPath/config/keystore.pin \\n--no-prompt"
-printf "$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" >> $setupPath/INSTALLATION
+       printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
+       ((ldd++))
+       ((admm++))
+       ((ldss++))
+       ((repp++))
+    done
+  fi
+
+  s=0
+  initReplication="$binPath./dsrepl initialize \\n--baseDN dc=example,dc=com \\n--toAllServers \\n--hostname $hostName${s}$domain \\n--port $adminPort \\n--bindDN "uid=admin" \\n--bindPassword $installationPassword \\n--trustStorePath $setupPath/config/keystore \\n--trustStorePasswordFile $setupPath/config/keystore.pin \\n--no-prompt"
+  printf "$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" >> $setupPath/INSTALLATION
 }
 
 #Call installation instruction function
@@ -785,64 +874,24 @@ installationText $ldapPort $ldapsPort $adminPort $replPort
 
 
 
-executeInstallation()
-{
-# Execute DS setup
+
+exit -1
+
+
+
+
+# Call setup 7x installation
 #
-#ldap ldaps admin replication replication port
-ld=$1
-lds=$2
-adm=$3
-rep=$4
-repb=$4
-
-printf "executing DS ./setup command...\n"
-
-for (( b=0; b<$noOfServers; b++ ))
-do
-        bootStrapServers=$bootStrapServers" "--bootstrapReplicationServer" "$hostName${b}$domain:$repb
-        ((repb++))
-done
+execute7xSetup $ldapPort $ldapsPort $adminPort $replPort $noOfServers $hostName $domain $destPath $installationPassword $deploymentKey $serverId $installationProfile $dsFamily
 
 
 
 
 
-if [ $dsVersion -eq 1 ];then
 
-	for (( i=0; i<$noOfServers; i++ ))
-	do
-		$destPath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --deploymentKeyPassword $installationPassword --deploymentKey $deploymentKey --enableStartTLS --ldapsPort $lds --hostName $hostName${i}$domain --serverId $serverId${i} --replicationPort $rep $bootStrapServers ${installationProfile} --acceptLicense 2>&1 >/dev/null &
 
-		((ld++))
-		((adm++))
-		((lds++))
-		((rep++))
 
-		progressBar 2
-		setupMessage
 
-	done
-else
-	for (( i=0; i<$noOfServers; i++ ))
-        do
-                $destPath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --deploymentIdPassword $installationPassword --deploymentId $deploymentKey --enableStartTLS --ldapsPort $lds --hostName $hostName${i}$domain --serverId $serverId${i} --replicationPort $rep $bootStrapServers ${installationProfile} --acceptLicense 2>&1 >/dev/null &
-
-                ((ld++))
-                ((adm++))
-                ((lds++))
-                ((rep++))
-
-                progressBar 2
-                setupMessage
-
-        done
-fi
-}
-
-#Call installation command
-#
-executeInstallation $ldapPort $ldapsPort $adminPort $replPort
 
 
 
