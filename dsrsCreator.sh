@@ -13,11 +13,9 @@
 
 
 clear
-noOfServers=$1
+#noOfServers=$1
 
-
-
-# Settings
+# **************************** SETTINGS ****************************************
 # !!! important !!!
 # you MUST change the below settings to meet your installation requirments!
 #
@@ -26,7 +24,6 @@ destPath=~/dsrsTopo
 
 #DS version, if the verison is between 7.0.x and 7.1.x enter 1 else for ds version 7.2.x and on enter 2
 dsVersion=2
-
 
 #Stand alone servers 1) for stand alone servers DS RS, 2) for DS/RS servers
 standAlone=2
@@ -37,7 +34,6 @@ domain=.example.com
 
 #serverId will be in the format MASTER0, MASTER1, MASTER2, MASTERx
 serverId=MASTER
-
 
 #installationProfile=ds-evaluation
 generateUsers=10000
@@ -73,12 +69,10 @@ installationProfile=$dsEval
 setupPath=${destPath}0/opendj
 binPath=$setupPath/bin/
 
-
-
-
 tput civis
 
-# ************************** Functions
+
+# ************************** FUNCTIONS *****************************************
 #
 progressBar()
 {
@@ -218,6 +212,7 @@ sselectedFamilyVersion()
  fi
 }
 
+
 selectProfile()
 {
   profile=$1
@@ -242,25 +237,167 @@ selectProfile()
 }
 
 
-# ************************** Start
-#
+checkPorts()
+{
+ portCheck=$1
+ noOfDS=$2
+ for (( i = 0; i < $noOfDS; i++ ))
+ do
+   result=`lsof -nP -itcp:$portCheck -stcp:listen|grep "TCP" |awk {'print $9'}|cut -c3-|head -1`
+   if [ "$result" == "$portCheck" ];then
+     printf "Port $portCheck exists and there will be conflict!\n"
+     printf "installation aborted!\n"
+     tput cnorm
+		 exit -1
+   else
+     printf "Checking port: $portCheck ..Done\n"
+  fi
+	((portCheck++))
+ done
+}
 
-#Check the number or replication servers to be installed
-#Max number is set to 8 (this number can be changed)
-#
-#if [[ $noOfServers -lt 2 ]]
-#then
-#	printf "The number of servers joining replication must be more that 1!\nPlease execute the script with command line argument like ./repDS 3\nwhere 3 is the number of DS to deploy, min=2 max=8.\n"
-#	tput cnorm
-#	exit -1
-#fi
-#if [[ $noOfServers -gt 8 ]]
-#then
-#	printf "The number of installing servers will be very high and resources will be not enough!\n"
-#	tput cnorm
-#	exit -1
-#fi
 
+checkJava()
+{
+  printf "Checking for Java environment..\n"
+  #printf "Java version: "; java -version 2>&1 |grep "version" | awk '{print $3}'
+  javaVer=`java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1`
+
+  if [[ $javaVer -lt 11 ]];then
+          printf "You need to install Java version 11\n"
+          printf "Execute sudo yum install java-11-openjdk\n"
+          printf "Installation failed!\n"
+          tput cnorm
+  	exit -1
+  else
+          jdkVersion=`java -version 2>&1 |grep "version" | awk '{print $3}'`
+          printf "compatible Java version $jdkVersion..Done\n"
+  fi
+}
+
+
+checkLsof()
+{
+  printf "Checking for lsof utility...\n"
+  which lsof
+  if [ $? -eq 0 ];then
+          printf "lsof utility found..Done\n"
+  else
+          printf "lsof utility not found, please use sudo yum/apt/brew install lsof\n"
+          printf "installation aborted!\n"
+          tput cnorm
+  	exit -1
+  fi
+}
+
+
+checkDirectories()
+{
+  noServers=$1
+  dPath=$2
+  for (( k=0; k<$noServers; k++ ))
+  do
+          if [ -d $ddPath${k} ];then
+                  echo; printf "Directory already exists $dPath${k}, please delete or rename it\n"
+                  printf "Installation abort!\n"
+                  tput cnorm
+                  exit -1
+          else
+                  printf "Creating directory $dPath${k}...\n"
+                  mkdir $dPath${k}
+                  if [ $? -eq 0 ];then
+                          printf "Created successful..Done\n"
+                  else
+                          printf "Can not create directory $dPath${k} check the directory permissions!\n"
+                          printf "Installation failed!\n"
+                          tput cnorm
+                          exit -1
+                  fi
+          fi
+  done
+}
+
+
+checkUnzip()
+{
+  echo
+  printf "Checking for unzip utility...\n"
+  #unzipVer=`unzip -v 2>&1`
+  which unzip
+  if [ $? -eq 0 ];then
+          printf "uzip util..Done\n"
+  else
+          printf "Unzip utility is not installed, you need to install it\n"
+          printf "Execute sudo yum install unzip\n"
+          printf "Installation failed!\n"
+          tput cnorm
+  	exit -1
+  fi
+}
+
+
+checkFileZip()
+{
+  zipFile=$1
+  printf "Checking for zip file..\n"
+  if [ -f "$zipFile" ];then
+          printf "found,$zipFile..ok\n"
+  else
+          printf "Can't find $zipFile file, please make sure to include\n"
+          printf "the file on the same directory where you execute the script\n"
+          printf "Installation failed!\n"
+          tput cnorm
+  	exit -1
+  fi
+}
+
+
+printMsg()
+{
+  commandOutput=$1
+  if [ $commandOutput -eq 0 ];then
+          printf "creation successful..Done\n"
+  else
+          printf "something went wrong creating the DEPLOYMENT_KEY!\n"
+          printf "Installation failed!\n"
+          tput cnorm
+  	exit -1
+  fi
+}
+
+
+insertHostNames()
+{
+  noServers=$1
+  hName=$2
+  domainName=$3
+  cp /etc/hosts /etc/hosts.backup
+  if [ $? -eq 0 ];then
+          printf "backup /etc/hosts hosts.backup..Done\n"
+  else
+          printf "backup /etc/hosts file hosts.backup..failed!\n"
+          printf "must run as root\n"
+          printf "installation..failed!\n"
+          tput cnorm
+  	exit -1
+  fi
+
+  for (( name=0; name<$noServers; name++ ))
+  do
+  cat /etc/hosts |grep "$hName${name}$domainName"
+  if [ $? -eq 0 ];then
+          printf "hostNames already exist on /etc/hosts..Done\n"
+  else
+          sed -i "/127.0.0.1/ s/$/ $hName${name}$domainName/" /etc/hosts
+  fi
+
+  done
+  printf "insert hostNames into /etc/hosts..Done\n"
+}
+
+
+# ************************** MAIN **********************************************
+# ******************************************************************************
 
 printf "      Topology Creator\n"
 printf "*****************************\n"
@@ -307,7 +444,6 @@ case "$dsFamily" in
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" && "$dsVersion" != "11" && "dsVersion" != "12" && "$dsVersion" != "13" ]]
    while [[ $dsVersion -lt 1 && $dsVersion -gt 13 ]]
    do
       clear
@@ -345,7 +481,6 @@ case "$dsFamily" in
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "$dsVersion" != "8" && "dsVersion" != "9" && "dsVersion" != "10" ]]
    while [[ $dsVersion -lt 1 && $dsVersion -gt 10 ]]
    do
      clear
@@ -378,7 +513,6 @@ case "$dsFamily" in
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-#   while [[ "$dsVersion" != "1" && "$dsVersion" != "2" && "dsVersion" != "3" && "$dsVersion" != "4" && "dsVersion" != "5" && "$dsVersion" != "6" && "dsVersion" != "7" && "dsVersion" != "8" ]]
    while [[ $dsVersion -lt 1 && $dsVersion -gt 8 ]]
    do
       clear
@@ -463,7 +597,6 @@ if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]] || [[ $dsFamily -gt 1 ]]; then
   printf "Enter your choise: "
   read dsProfile
   printf "\n"
-#while [[ "$dsProfile" != "1" && "$dsProfile" != "2" && "$dsProfile" != "3" && "$dsProfile" != "3" && "$dsProfile" != "4" && "$dsProfile" != "5" && "$dsProfile" != "6" && "$dsProfile" != "7" ]]
   while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
   do
 	   clear
@@ -493,72 +626,29 @@ if [[ $standAlone -eq 2 ]]; then
     printf "No: "
     read noOfServers
   done
+  clear
 fi
 
+
+# Call function to check the product ds Family and Version
+#
 sselectedFamilyVersion $dsFamily $dsVersion
+
+# Call function to select profile
+#
 selectProfile $dsProfile
+
 printf "Selected dsVersion: $selectedVersion, selected ds profile: $installationProfile, selected ds/rs server No of DS: $dsNumber, No of RS: $rsNumber, total number of servers: $noOfServers"
-
-
-
 printf "\n"
+
 # check for Java environment
 #
-printf "Checking for Java environment..\n"
-#printf "Java version: "; java -version 2>&1 |grep "version" | awk '{print $3}'
-javaVer=`java -version 2>&1 | head -1 | cut -d'"' -f2 | sed '/^1\./s///' | cut -d'.' -f1`
+checkJava
 
-if [[ $javaVer -lt 11 ]];then
-        printf "You need to install Java version 11\n"
-        printf "Execute sudo yum install java-11-openjdk\n"
-        printf "Installation failed!\n"
-        tput cnorm
-	exit -1
-else
-        jdkVersion=`java -version 2>&1 |grep "version" | awk '{print $3}'`
-        printf "compatible Java version $jdkVersion..Done\n"
-fi
-
-
-
-
-# Check if netstat is installed and then check all the ports to avoid conflicts..
+# Check if netstat/lsof is installed and then check all the ports to avoid conflicts..
 #
 #netstat -V &>/dev/null
-which lsof
-
-if [ $? -eq 0 ];then
-        printf "lsof utility found..Done\n"
-else
-        printf "lsof utility not found, please use sudo yum/apt/brew install lsof\n"
-        printf "installation aborted!\n"
-        tput cnorm
-	exit -1
-fi
-
-
-#lsof -nP -itcp -stcp:listen |grep "TCP *" |awk {'print $9'}|cut -c3-
-#lsof -nP -itcp:5000 -stcp:listen|grep "TCP" |awk {'print $9'}|cut -c3-|head -1
-
-checkPorts()
-{
- portCheck=$1
- noOfDS=$2
- printf "The number of servers is: $noOfDS\n"
- for (( i = 0; i < $noOfDS; i++ ))
- do
-   result=`lsof -nP -itcp:$portCheck -stcp:listen|grep "TCP" |awk {'print $9'}|cut -c3-|head -1`
-   if [ "$result" == "$portCheck" ];then
-     printf "Port $portCheck exists and there will be conflict!\n"
-     printf "installation aborted!\n"
-     tput cnorm
-		 exit -1
-   else
-     printf "Checking port: $portCheck ..Done\n"
-  fi
-	((portCheck++))
- done
-}
+checkLsof
 
 #checkPorts()
 #{
@@ -590,61 +680,15 @@ done
 #Check for existing directories
 #Create new directories if there are none existing
 #
-for (( k=0; k<$noOfServers; k++ ))
-do
-        if [ -d $destPath${k} ];then
-                echo; printf "Directory already exists, please delete or rename it\n"
-                printf "Installation abort!\n"
-                tput cnorm
-                exit -1
-        else
-                printf "Creating directory $destPath${k}...\n"
-                mkdir $destPath${k}
-                if [ $? -eq 0 ];then
-                        printf "Created successful..Done\n"
-                else
-                        printf "Can not create directory $destPath${k} check the directory permissions!\n"
-                        printf "Installation failed!\n"
-                        tput cnorm
-                        exit -1
-                fi
-        fi
-done
-
-
+checkDirectories $noOfServers $destPath
 
 # Check if unzip utility exists
 #
-echo
-printf "Checking for unzip utility...\n"
-#unzipVer=`unzip -v 2>&1`
-which unzip
-if [ $? -eq 0 ];then
-        printf "uzip util..Done\n"
-else
-        printf "Unzip utility is not installed, you need to install it\n"
-        printf "Execute sudo yum install unzip\n"
-        printf "Installation failed!\n"
-        tput cnorm
-	exit -1
-fi
-
-
+checkUnzip
 
 # Check if DS-7.x.x.zip file exist on the directory
 #
-printf "Checking for zip file..\n"
-if [ -f "$installationZipFile" ];then
-        printf "found,$installationZipFile..ok\n"
-else
-        printf "Can't find $installationZipFile file, please make sure to include\n"
-        printf "the file on the same directory where you execute the script\n"
-        printf "Installation failed!\n"
-        tput cnorm
-	exit -1
-fi
-
-
+checkFileZip $installationZipFile
 
 # Unzip files to directories
 #
@@ -657,25 +701,23 @@ do
 done
 
 
-
 # Create deployment key
 #
-printf "creating DEPLOYMENT_KEY...please wait it might take some time..\n"
-export installationPassword
-if [ $dsVersion -eq 1 ];then
+if [ $dsFamily -eq 2 ];then
+  printf "creating DEPLOYMENT_KEY...please wait it might take some time..\n"
+  export installationPassword
 	$binPath./dskeymgr create-deployment-key --deploymentKeyPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
-else
-	$binPath./dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
+  commandResult=$?
+  printMsg $commandResult
 fi
 
-if [ $? -eq 0 ];then
-        printf "creation successful..Done\n"
-else
-        printf "something went wrong creating the DEPLOYMENT_KEY!\n"
-        printf "Installation failed!\n"
-        tput cnorm
-	exit -1
+if [ $dsFamily -eq 3 ];then
+  printf "creating DEPLOYMENT-ID...please wait it might take some time..\n"
+  export installationPassword
+	$binPath./dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
+  printMsg $commandResult
 fi
+
 deploymentKey=$(cat $setupPath/DEPLOYMENT_KEY |awk '{ print $1 }')
 export deploymentKey
 printf "DEPLOYMENT_KEY: $deploymentKey\n"
@@ -684,28 +726,8 @@ printf "DEPLOYMENT_KEY: $deploymentKey\n"
 
 # Insert hostNames into /etc/hosts file
 #
-cp /etc/hosts /etc/hosts.backup
-if [ $? -eq 0 ];then
-        printf "backup /etc/hosts hosts.backup..Done\n"
-else
-        printf "backup /etc/hosts file hosts.backup..failed!\n"
-        printf "must run as root\n"
-        printf "installation..failed!\n"
-        tput cnorm
-	exit -1
-fi
+insertHostNames $noOfServers $hostName $domain
 
-for (( name=0; name<$noOfServers; name++ ))
-do
-cat /etc/hosts |grep "$hostName${name}$domain"
-if [ $? -eq 0 ];then
-        printf "hostNames already exist on /etc/hosts..Done\n"
-else
-        sed -i "/127.0.0.1/ s/$/ $hostName${name}$domain/" /etc/hosts
-fi
-
-done
-printf "insert hostNames into /etc/hosts..Done\n"
 
 
 
