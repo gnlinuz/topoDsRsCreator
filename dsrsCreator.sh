@@ -7,36 +7,38 @@
 #
 # Before execuete the script make sure you have installed Java version 11 or later
 # the unzip and lsof utility
-# include the DS.zip in the same directory where you execute the script
+# include the DS.zip file in the same directory where you execute the script
 # chmod 755 the script to make it executable and execute it as root or sudo
 
 
 clear
 
-# **************************** SETTINGS ****************************************
-# !!! important !!!
+# **************************** SETTINGS ***********************************
+#                          !!! important !!!
 # you MUST change the below settings to meet your installation requirments!
 #
+# *************************************************************************
 #Destination path will be in the format /opt/ds7xRepl0, /opt/ds7xRepl1, /opt/ds7xRepl2, /opt/ds7xRepl3, /opt/ds7xReplx ...
 destPath=~/dsrsTopo
+
+#Path for stand alone DS RS servers
+#
+dsAlonePath=${destPath}DS
+rsAlonePath=${destPath}RS
 
 #hostname will be in format ds0.example.com, ds1.example.com, ds2.example.com, dsx.example.com
 hostName=ds
 domain=.example.com
 
 #serverId will be in the format MASTER0, MASTER1, MASTER2, MASTERx
-serverId=MASTER
+srvID=MASTER
 
 #password to be used for uid=admin for uid=Monitor cn=Directory Manager
 installationPassword=DrowssaP
+export installationPassword
 
 #installationProfile=ds-evaluation
 generateUsers=10000
-
-#change the name of the zip file to install
-
-installationZipFile=DS-7.2.0.zip
-
 
 #Default protocol ports to be used
 #on each additional server the port will be +1 ie. server0 ldapPort:1389, server1 ldapPort:1390, server2 ldapPort:1391 etc
@@ -47,7 +49,8 @@ httpsPort=8443
 replPort=8989
 adminPort=4444
 
-
+#DS/RS setup profiles
+#
 dsEval="--profile ds-evaluation --set ds-evaluation/generatedUsers:$generateUsers "
 dsAmCtsAmReap="--profile am-cts --set am-cts/amCtsAdminPassword:5up35tr0ng "
 dsAmCtsSes="--profile am-cts --set am-cts/amCtsAdminPassword:5up35tr0ng --set am-cts/tokenExpirationPolicy:am-sessions-only "
@@ -56,13 +59,20 @@ dsAmConfig="--profile am-config --set am-config/amConfigAdminPassword:5up35tr0ng
 dsAmIdentities="--profile am-identity-store --set am-identity-store/amIdentityStoreAdminPassword:5up35tr0ng "
 idmRepo="--profile idm-repo --set idm-repo/domain:forgerock.com "
 
-#Default installation profile
-installationProfile=$dsEval
+# dseval        dc=example,dc=com
+# cts           ou=tokens
+# amConfig      ou=am-config
+# amIdentities  ou=identities
+# idmRepo       dc=openidm,dc=forgerock,dc=com
+profileBaseDN=(dc=example,dc=com ou=tokens ou=am-config ou=identities dc=openidm,dc=forgerock,dc=com)
 
 # Path of the first installed server
-#
+# and bin path
 setupPath=${destPath}0/opendj
 binPath=$setupPath/bin/
+
+firstDSRSpath=${dsAlonePath}0/opendj
+firstDSRSbinPath=${firstDSRSpath}/bin/
 
 tput civis
 
@@ -85,6 +95,19 @@ while ps |grep $! &>/dev/null; do
         sleep ${sleepTime}
 done
 printf "\n"
+}
+
+
+progressBar2()
+{
+  sleepTime=$1
+  pid=$2
+  while ps -p $pid &>/dev/null; do
+    printf '▇'
+    #printf '\u2589'
+    sleep ${sleepTime}
+  done
+  printf "\n"
 }
 
 
@@ -295,22 +318,22 @@ checkLsof()
 
 checkDirectories()
 {
-  noServers=$1
-  dPath=$2
-  for (( k=0; k<$noServers; k++ ))
+  local destinationPath=$1
+  local numberOfServer=$2
+  for (( k=0; k<$numberOfServer; k++ ))
   do
-          if [ -d $ddPath${k} ];then
-                  echo; printf "Directory already exists $dPath${k}, please delete or rename it\n"
+          if [ -d $destinationPath${k} ];then
+                  echo; printf "Directory already exists $destinationPath${k}, please delete or rename it\n"
                   printf "Installation abort!\n"
                   tput cnorm
                   exit -1
           else
-                  printf "Creating directory $dPath${k}...\n"
-                  mkdir $dPath${k}
+                  printf "Creating directory $destinationPath${k}...\n"
+                  mkdir $destinationPath${k}
                   if [ $? -eq 0 ];then
                           printf "Created successful..Done\n"
                   else
-                          printf "Can not create directory $dPath${k} check the directory permissions!\n"
+                          printf "Can not create directory $destinationPath${k} check the directory permissions!\n"
                           printf "Installation failed!\n"
                           tput cnorm
                           exit -1
@@ -357,7 +380,7 @@ checkFileZip()
 printMsg()
 {
   commandOutput=$1
-  if [ $commandOutput -eq 0 ];then
+  if [[ $commandOutput -eq 0 ]];then
           printf "creation successful..Done\n"
   else
           printf "something went wrong creating the DEPLOYMENT_KEY!\n"
@@ -369,10 +392,7 @@ printMsg()
 
 
 insertHostNames()
-{
-  noServers=$1
-  hName=$2
-  domainName=$3
+{ 
   cp /etc/hosts /etc/hosts.backup
   if [ $? -eq 0 ];then
           printf "backup /etc/hosts hosts.backup..Done\n"
@@ -384,17 +404,171 @@ insertHostNames()
   	exit -1
   fi
 
-  for (( name=0; name<$noServers; name++ ))
+  for (( name=0; name<$noOfServers; name++ ))
   do
-  cat /etc/hosts |grep "$hName${name}$domainName"
+  cat /etc/hosts |grep "$hostName${name}$domain"
   if [ $? -eq 0 ];then
           printf "hostNames already exist on /etc/hosts..Done\n"
   else
-          sed -i "/127.0.0.1/ s/$/ $hName${name}$domainName/" /etc/hosts
+          sed -i '' "/127.0.0.1/ s/$/ ${hostName}${name}${domain}/" /etc/hosts
   fi
 
   done
   printf "insert hostNames into /etc/hosts..Done\n"
+}
+
+
+startServers()
+{
+    printf "Starting DS/RS servers...\n"
+    for (( startServer=0; startServer<$noOfServers; startServer++ ))
+    do
+        $destPath${startServer}/opendj/bin/./start-ds
+        process_id=$!
+        wait $process_id
+        printf "Server$startServer started..Done\n\n\n"
+    done
+}
+
+
+
+exportKey()
+{
+  depKey=$(cat $theSetupPath/DEPLOYMENT_KEY |awk '{ print $1 }')
+  export depKey
+  printf "DEPLOYMENT_KEY/ID: $depKey\n"
+}
+
+
+
+createDepKey()
+{
+  theBinPath=$1
+  theSetupPath=$2 
+  printf "creating DEPLOYMENT-ID...please wait it might take some time..\n"
+  $theBinPath/dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
+  commandResult=$?
+  printMsg $commandResult
+  exportKey $theSetupPath
+}
+
+
+createDepKey2()
+{
+  theBinPath=$1
+  theSetupPath=$2  
+  printf "creating DEPLOYMENT_KEY...please wait it might take some time..\n"
+  $theBinPath./dskeymgr create-deployment-key --deploymentKeyPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
+  commandResult=$?
+  printMsg $commandResult
+  exportKey $theSetupPath
+}
+
+
+installationText()
+{
+  # Create INSTALLATION text
+  # ldap ldaps admin replication replication port https
+  #
+  ldd=$1
+  ldss=$2
+  admm=$3
+  repp=$4
+  repbb=$4
+  htps=$5
+  
+  local num=0
+  printf "Installation instructions..\n\n\n" > $setupPath/INSTALLATION
+
+  for (( b=0; b<$noOfServers; b++ ))
+  do
+        bootStrapSrv="$bootStrapSrv--bootstrapReplicationServer $hostName${b}$domain:$repbb\n"
+        ((repbb++))
+  done
+
+  if [ $dsFamily -eq 2 ];then
+       for (( i=0; i<$noOfServers; i++ ))
+        do
+             setupCommand="$destPath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $hostName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv}${installationProfile}  \ \n--acceptLicense"
+
+             printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
+             ((ldd++))
+             ((admm++))
+             ((ldss++))
+             ((repp++))
+             ((htps++))
+        done
+  fi
+
+  if [ $dsFamily -eq 3 ];then
+       for (( i=0; i<$noOfServers; i++ ))
+         do
+            setupCommand="$destPath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $hostName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv}${installationProfile} \ \n--acceptLicense"
+
+            printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
+            ((ldd++))
+            ((admm++))
+            ((ldss++))
+            ((repp++))
+            ((htps++))
+         done
+  fi
+
+  if [ $noOfServers -gt 1 ];then
+    s=0
+
+    case "$dsProfile" in
+    1) bDN=${profileBaseDN[0]}
+       # dsEval
+       ;;
+    2) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    3) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    4) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    5) bDN=${profileBaseDN[2]}
+       # amConfig
+       ;;
+    6) bDN=${profileBaseDN[3]}
+       # amIdentities
+       ;;
+    7) bDN=${profileBaseDN[4]}
+       # idmRepo
+       ;;         
+    *)
+       ;;   
+    esac
+
+    initReplication="$binPath./dsrepl initialize \\n--baseDN $bDN \\n--toAllServers \\n--hostname $hostName${num}$domain \\n--port $adminPort \\n--bindDN "uid=admin" \\n--bindPassword $installationPassword \\n--trustStorePath $setupPath/config/keystore \\n--trustStorePasswordFile $setupPath/config/keystore.pin \\n--no-prompt"
+    printf "$initReplication\n\n\nDEPLOYMENT_KEY:$depKey\nPassword: $installationPassword\n" >> $setupPath/INSTALLATION
+  fi  
+}
+
+
+exStatusCommand()
+{
+    local num=0
+    $binPath./dsrepl status --showGroups --showReplicas --hostname $hostName${num}$domain --port $adminPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $setupPath/config/keystore --trustStorePassword:file $setupPath/config/keystore.pin --no-prompt
+}
+
+
+# The creation is on the wrong path
+createStartStop()
+{
+    printf "\n\nCreating srvDS.sh command to start and stop all your servers,\n"
+    printf "Command created on the default path, execute ./srvDS.sh stop or ./srvDS start\n\n"
+
+    numSrv=$noOfServers
+    printf "#!/bin/bash\n\nSrv=$numSrv\n\ndPath=$destPath\n" > $setupPath/srvDS.sh
+
+    command='p=$1\nif [ "$p" = "start" ];then\n\tfor (( j=0; j<$Srv; j++ ))\n\tdo\n\t\t$dPath${j}/opendj/bin/./start-ds\n\tdone\nelse\n\tfor (( j=0; j<$Srv; j++ ))\n\tdo\n\t\t$dPath${j}/opendj/bin/./stop-ds\n\tdone\nfi\n'
+
+    printf "$command" >> $setupPath/srvDS.sh
+    chmod 755 $setupPath/srvDS.sh
 }
 
 
@@ -407,65 +581,98 @@ execute7xSetup()
   adm=$3
   rep=$4
   repb=$4
-  noServers=$5
-  hName=$6
-  Domain=$7
-  dePath=$8
-  setupPass=$9
-  Key=$10
-  srvId=$11
-  setupProfile=$12
-  dFamily=$13
+  htps=$5
 
+  local num=0
   printf "executing DS ./setup command...\n"
 
-  for (( b=0; b<$noServers; b++ ))
+  for (( b=0; b<$noOfServers; b++ ))
   do
-          bootStrapServers=$bootStrapServers" "--bootstrapReplicationServer" "$hName${b}$Domain:$repb
+          bootStrapServers=$bootStrapServers" "--bootstrapReplicationServer" "${hostName}${b}${domain}:${repb}
           ((repb++))
   done
 
-  if [ $dFamily -eq 2 ];then
+  if [ $dsFamily -eq 2 ];then
 
-  	for (( i=0; i<$noServers; i++ ))
-  	do
-  		$dePath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $setupPass --monitorUserPassword $setupPass --deploymentKeyPassword $setupPass --deploymentKey $Key --enableStartTLS --ldapsPort $lds --hostName $hName${i}$Domain --serverId $srvId${i} --replicationPort $rep $bootStrapServers ${setupProfile} --acceptLicense 2>&1 >/dev/null &
-
-  		((ld++))
-  		((adm++))
-  		((lds++))
-  		((rep++))
-
-  		progressBar 2
-  		setupMessage
-
-  	done
-  fi
-
-  if [ $dFamily -eq 3 ];then
-  	for (( i=0; i<$noServers; i++ ))
-      do
-        $dePath${i}/opendj/./setup --ldapPort $ld --adminConnectorPort $adm --rootUserDN "uid=admin" --rootUserPassword $setupPass --monitorUserPassword $setupPass --deploymentIdPassword $setupPass --deploymentId $Key --enableStartTLS --ldapsPort $lds --hostName $hName${i}$Domain --serverId $srvId${i} --replicationPort $rep $bootStrapServers ${setupProfile} --acceptLicense 2>&1 >/dev/null &
-
+    for (( i=0; i<$noServers; i++ ))
+    do
+        ${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld  --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 1 $process_id
         ((ld++))
         ((adm++))
         ((lds++))
         ((rep++))
+        ((htps++))
+        setupMessage
+    done
+  fi
 
-        progressBar 2
+  if [ $dsFamily -eq 3 ];then
+    for (( i=0; i<$noOfServers; i++ ))
+      do
+        echo "${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &">TEST.TXT
+        ${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 1 $process_id
+        ((ld++))
+        ((adm++))
+        ((lds++))
+        ((rep++))
+        ((htps++))
         setupMessage
       done
+  fi
+
+  startServers
+
+  if [ $noOfServers -gt 1 ];then
+    printf "starting replication initialisation please wait..\n"
+    sleep 10
+    case "$dsProfile" in
+    1) bDN=${profileBaseDN[0]}
+       # dsEval
+       ;;
+    2) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    3) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    4) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    5) bDN=${profileBaseDN[2]}
+       # amConfig
+       ;;
+    6) bDN=${profileBaseDN[3]}
+       # amIdentities
+       ;;
+    7) bDN=${profileBaseDN[4]}
+       # idmRepo
+       ;;         
+    *)
+       ;;   
+    esac 
+    $binPath./dsrepl initialize --baseDN $bDN --toAllServers --hostname $hostName${num}$domain --port $adminPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $setupPath/config/keystore --trustStorePasswordFile $setupPath/config/keystore.pin --no-prompt
+    printf "Replication initialisation started..\n\n"
   fi
 }
 
 
 
-exportKey()
+unzipDSRSsetupFile()
 {
-  sPath=$1
-  deploymentKey=$(cat $sPath/DEPLOYMENT_KEY |awk '{ print $1 }')
-  export deploymentKey
-  printf "DEPLOYMENT_KEY/ID: $deploymentKey\n"
+    local destinationPath=$1
+    local numberOfServer=$2
+    printf "Unzipping files to directories...\n"
+    for (( dir=0; dir<$numberOfServer; dir++ ))
+    do
+        unzip $selectedVersion -d $destinationPath${dir} 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 0 $process_id
+        unzipMessage
+    done
 }
 
 
@@ -478,6 +685,14 @@ exportKey()
 
 
 
+
+
+endOfInstallation()
+{
+    printf "Installation successful..Done\n"
+    printf "Sagionara...\n"
+    tput cnorm
+}
 
 
 # ************************** MAIN **********************************************
@@ -625,26 +840,26 @@ clear
 
 printf "    Select type of Servers\n"
 printf "********************************\n"
-printf "1. Stand Alone DS RS servers\n"
-printf "2. Non Stand Alone DS RS servers\n"
+printf "1. Normal DS/RS servers\n"
+printf "2. Stand Alone DS RS servers\n"
 printf "Enter your choise: "
 read standAlone
 printf "\n"
 while [[ "$standAlone" != "1" && "$standAlone" != "2" ]]
 do
-	clear
+  clear
   printf "    Select type of Servers\n"
   printf "*********************************\n"
-  printf "1. Stand Alone DS RS servers\n"
-  printf "2. Non Stand Alone DS RS servers\n"
+  printf "1. Normal DS/RS servers\n"
+  printf "2. Stand Alone DS RS servers\n"
   printf "Enter your choise: "
   read standAlone
 done
 
 clear
 
-if [[ $standAlone -eq 1 ]]; then
-
+if [[ $standAlone -eq 2 ]]; then
+  typeOfInstallation=2  
   printf " Select number of Servers\n"
   printf "*****************************\n"
   printf "Number of stand alone DS: "
@@ -671,6 +886,7 @@ clear
 
 if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]] || [[ $dsFamily -gt 1 ]]; then
 
+  typeOfInstallation=1  
   printf "                 Please select profile\n"
   printf "***********************************************************\n"
   printf "1. Evaluation\n"
@@ -685,23 +901,23 @@ if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]] || [[ $dsFamily -gt 1 ]]; then
   printf "\n"
   while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
   do
-	   clear
-     printf "                 Please select profile\n"
-     printf "***********************************************************\n"
-	   printf "1. Evaluation\n"
-	   printf "2. AM CTS (AM reaper manages all token expiration)\n"
-	   printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
-	   printf "4. AM CTS (DS manages all token expiration)\n"
-	   printf "5. AM Configuration\n"
-	   printf "6. AM identities\n"
-     printf "7. IDM Repository\n"
-	   printf "Enter your choise: "
-     read dsProfile
+	clear
+    printf "                 Please select profile\n"
+    printf "***********************************************************\n"
+	printf "1. Evaluation\n"
+	printf "2. AM CTS (AM reaper manages all token expiration)\n"
+	printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
+	printf "4. AM CTS (DS manages all token expiration)\n"
+	printf "5. AM Configuration\n"
+	printf "6. AM identities\n"
+    printf "7. IDM Repository\n"
+	printf "Enter your choise: "
+    read dsProfile
   done
 fi
 
 
-if [[ $standAlone -eq 2 ]]; then
+if [[ $standAlone -eq 1 ]]; then
 
   printf "Select number of servers (1 - 8)\n"
   printf "No: "
@@ -713,229 +929,186 @@ if [[ $standAlone -eq 2 ]]; then
     read noOfServers
   done
   clear
+
 fi
 
 
-# Call function to check the product ds Family and Version
-#
-sselectedFamilyVersion $dsFamily $dsVersion
+# Installation of normal DS/RS servers at version DS 7x
+# 
+if [[ $typeOfInstallation -eq 1 ]]; then
 
-# Call function to select profile
-#
-selectProfile $dsProfile
+    # Call function to check the product ds Family and Version
+    #
+    sselectedFamilyVersion $dsFamily $dsVersion
 
-printf "Selected dsVersion: $selectedVersion, selected ds profile: $installationProfile, selected ds/rs server No of DS: $dsNumber, No of RS: $rsNumber, total number of servers: $noOfServers"
-printf "\n"
+    # Call function to select profile
+    #
+    selectProfile $dsProfile
 
-# check for Java environment
-#
-checkJava
+    # Call function to check for Java environment
+    #
+    checkJava
 
-# Check if netstat/lsof is installed and then check all the ports to avoid conflicts..
-#
-#netstat -V &>/dev/null
-checkLsof
+    # Call function to check if netstat/lsof is installed and then check all the ports to avoid conflicts..
+    #
+    # netstat -V &>/dev/null
+    checkLsof
 
-#checkPorts()
-#{
-# portCheck=$1
-# noOfDS=$2
-# for (( i=0; i<$noOfDS; i++ ))
-# do
-#	result=`netstat -tulpn |grep -w $portCheck| awk {'print $4'} |cut -c4-`
-#        result=`netstat -tulpn |grep -o -m 1 $portCheck`
-#        if [ "$result" == "$portCheck" ];then
-#                printf "Port $portCheck exists and there will be conflict!\n"
-#                printf "installation aborted!\n"
-#                tput cnorm
-#		exit -1
-#        else
-#                printf "Checking port: $portCheck ..Done\n"
-#        fi
-#	((portCheck++))
-# done
-#}
-
-for j in $ldapPort $ldapsPort $httpsPort $replPort $adminPort
-do
-	printf "Checking protocol port: $j\n"
-	checkPorts $j $noOfServers
-done
-
-
-#Check for existing directories
-#Create new directories if there are none existing
-#
-checkDirectories $noOfServers $destPath
-
-# Check if unzip utility exists
-#
-checkUnzip
-
-# Check if DS-7.x.x.zip file exist on the directory
-#
-checkFileZip $selectedVersion
-
-# Unzip files to directories
-#
-printf "Unzipping files to directories...\n"
-for (( dir=0; dir<$noOfServers; dir++ ))
-do
-        unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
-        progressBar 0
-        unzipMessage
-done
-
-
-# Create deployment key
-#
-if [ $dsFamily -eq 2 ];then
-  printf "creating DEPLOYMENT_KEY...please wait it might take some time..\n"
-  export installationPassword
-	$binPath./dskeymgr create-deployment-key --deploymentKeyPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
-  commandResult=$?
-  printMsg $commandResult
-  exportKey $setupPath
-fi
-
-if [ $dsFamily -eq 3 ];then
-  printf "creating DEPLOYMENT-ID...please wait it might take some time..\n"
-  export installationPassword
-	$binPath./dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $setupPath/DEPLOYMENT_KEY
-  printMsg $commandResult
-  exportKey $setupPath
-fi
-
-printf "\n"
-printf "Check if variable deploymentKey is available: $deploymentKey"
-printf "\n"
-
-
-# Insert hostNames into /etc/hosts file
-#
-insertHostNames $noOfServers $hostName $domain
-
-
-
-
-installationText()
-{
-  # Create INSTALLATION text
-  #printf "Installation instructions..\n\n\n$setupCommand\n\n\n$setupCommand2\n\n\n$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" > $setupPath/INSTALLATION
-  #
-  #ldap ldaps admin replication replication port
-  ldd=$1
-  ldss=$2
-  admm=$3
-  repp=$4
-  repbb=$4
-
-  printf "Installation instructions..\n\n\n" > $setupPath/INSTALLATION
-
-  for (( b=0; b<$noOfServers; b++ ))
-  do
-        bootStrapSrv="$bootStrapSrv--bootstrapReplicationServer $hostName${b}$domain:$repbb\n"
-        ((repbb++))
-  done
-
-  if [ $dsFamily -eq 2 ];then
-	   for (( i=0; i<$noOfServers; i++ ))
-	   do
-		     setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile}  \ \n--acceptLicense"
-
-		     printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
-		     ((ldd++))
-		     ((admm++))
-		     ((ldss++))
-		     ((repp++))
-	   done
-  fi
-
-  if [ $dsFamily -eq 3 ];then
-	   for (( i=0; i<$noOfServers; i++ ))
-     do
-       setupCommand="$destPath${i}/opendj/./setup \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $deploymentKey \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--hostName $hostName${i}$domain \ \n--serverId $serverId${i} \ \n--replicationPort $repp \ \n$bootStrapSrv${installationProfile} \ \n--acceptLicense"
-
-       printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
-       ((ldd++))
-       ((admm++))
-       ((ldss++))
-       ((repp++))
+    # checkPorts for DS/RS servers
+    #
+    for j in $ldapPort $ldapsPort $httpsPort $replPort $adminPort
+    do
+        printf "Checking protocol port: $j\n"
+        checkPorts $j $noOfServers
     done
-  fi
 
-  s=0
-  initReplication="$binPath./dsrepl initialize \\n--baseDN dc=example,dc=com \\n--toAllServers \\n--hostname $hostName${s}$domain \\n--port $adminPort \\n--bindDN "uid=admin" \\n--bindPassword $installationPassword \\n--trustStorePath $setupPath/config/keystore \\n--trustStorePasswordFile $setupPath/config/keystore.pin \\n--no-prompt"
-  printf "$initReplication\n\n\nDEPLOYMENT_KEY:$deploymentKey\nPassword: $installationPassword\n" >> $setupPath/INSTALLATION
-}
+    # Call function to check for existing directories
+    # and create new directories
+    #
+    checkDirectories $destPath $noOfServers
 
-#Call installation instruction function
-installationText $ldapPort $ldapsPort $adminPort $replPort
+    # Call function to check if unzip utility exists
+    #
+    checkUnzip
 
+    # Call function to check if DS-7.x.x.zip file exist on the directory
+    #
+    checkFileZip $selectedVersion
 
+    # Unzip files to directories
+    #
+    printf "Unzipping files to directories...\n"
+    printf "\n"
+    printf "Check for number of servers are: $noOfServers"
+    printf "\n"
+    for (( dir=0; dir<$noOfServers; dir++ ))
+    do
+        unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 0 $process_id
+        unzipMessage
+    done
 
+    # Create deployment key
+    #
+    if [[ $dsFamily -eq 2 ]];then
+        createDepKey2 $destPath $setupPath
+    fi
 
-exit -1
+    if [[ $dsFamily -eq 3 ]];then
+        createDepKey $destPath
+    fi
 
+    # Insert hostNames into /etc/hosts file
+    #
+    insertHostNames
 
+    # Call function to create installation text
+    #
+    installationText $ldapPort $ldapsPort $adminPort $replPort $httpsPort
 
+    # Call function to execute installation of DS/RS 7.x family
+    #
+    execute7xSetup $ldapPort $ldapsPort $adminPort $replPort $httpsPort
 
-# Call setup 7x installation
-#
-execute7xSetup $ldapPort $ldapsPort $adminPort $replPort $noOfServers $hostName $domain $destPath $installationPassword $deploymentKey $serverId $installationProfile $dsFamily
+    # Execute status command
+    #
+    exStatusCommand
 
+    # Create start stop command for all servers
+    #
+    createStartStop
 
+    # End of installation message
+    #
+    endOfInstallation
 
-
-
-
-
-
-
-
-
-
-# starting DS servers
-#
-printf "Starting DS server$startServer\n"
-for (( startServer=0; startServer<$noOfServers; startServer++ ))
-do
-	$destPath${startServer}/opendj/bin/./start-ds
-	printf "Server$startServer started..Done\n\n\n"
-done
-
-
-
-# Initialise replication
-#
-s=0
-printf "starting replication initialisation please wait..\n"
-sleep 10
-$binPath./dsrepl initialize --baseDN dc=example,dc=com --toAllServers --hostname $hostName${s}$domain --port $adminPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $setupPath/config/keystore --trustStorePasswordFile $setupPath/config/keystore.pin --no-prompt
-printf "Replication initialisation started..\n\n"
-
-#Execute status command
-#
-sleep 20
-$binPath./dsrepl status --showGroups --showReplicas --hostname $hostName${s}$domain --port $adminPort --bindDN "uid=monitor" --bindPassword $installationPassword --trustStorePath $setupPath/config/keystore --trustStorePassword:file $setupPath/config/keystore.pin --no-prompt
-
-#Create start stop command for all servers
-#
-printf "\n\nCreating srvDS.sh command to start and stop all your servers,\n"
-printf "Command created on the default path, execute ./srvDS.sh stop or ./srvDS start\n\n"
-
-numSrv=$noOfServers
-printf "#!/bin/bash\n\nSrv=$numSrv\n\ndPath=$destPath\n" > $setupPath/srvDS.sh
-
-command='p=$1\nif [ "$p" = "start" ];then\n\tfor (( j=0; j<$Srv; j++ ))\n\tdo\n\t\t$dPath${j}/opendj/bin/./start-ds\n\tdone\nelse\n\tfor (( j=0; j<$Srv; j++ ))\n\tdo\n\t\t$dPath${j}/opendj/bin/./stop-ds\n\tdone\nfi\n'
-
-printf "$command" >> $setupPath/srvDS.sh
-chmod 755 $setupPath/srvDS.sh
+fi
 
 
 
-printf "installation successful..Done\n"
-printf "Sagionara...\n"
-tput cnorm
+
+
+
+if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
+    # Call function to check the product ds Family and Version
+    #
+    sselectedFamilyVersion $dsFamily $dsVersion
+    # check this function
+
+
+    # Call function to select profile
+    #
+    if [[ dsNumber -gt 0 ]];then
+        selectProfile $dsProfile
+    fi
+    # Call function to check for Java environment
+    #
+    checkJava
+
+    # Call function to check if netstat/lsof is installed and then check all the ports to avoid conflicts..
+    #
+    # netstat -V &>/dev/null
+    checkLsof
+
+    # checkPorts for stand alone DS and RS servers
+    #
+    if [[ dsNumber -gt 0 ]]; then
+
+        for j in $ldapPort $ldapsPort $httpsPort $adminPort
+        do
+            printf "Checking protocol port: $j\n"
+            checkPorts $j $dsNumber
+        done
+    fi
+
+    if [[ rsNumber -gt 0 ]]; then   
+        ldapP=$((ldapPort + dsNumber))
+        ldapsP=$((ldapsPort + dsNumber))
+        httpsP=$((httpsPort + dsNumber))
+        adminP=$((adminPort + dsNumber))
+        for j in $ldapP $ldapsP $httpsP $replPort $adminP
+        do
+            printf "Checking protocol port: $j\n"
+            checkPorts $j $rsNumber
+        done
+    fi
+
+    # Call function to check for existing directories
+    # and create new directories
+    #
+    checkDirectories $dsAlonePath $dsNumber
+    checkDirectories $rsAlonePath $rsNumber
+
+    # Call function to check if unzip utility exists
+    #
+    checkUnzip
+
+    # Call function to check if DS-7.x.x.zip file exist on the directory
+    #
+    checkFileZip $selectedVersion
+
+    # Unzip files to directories
+    #
+    unzipDSRSsetupFile $dsAlonePath $dsNumber
+    unzipDSRSsetupFile $rsAlonePath $rsNumber
+
+
+    # Create deployment key
+    #
+    if [[ $dsFamily -eq 2 ]];then
+        createDepKey2 $firstDSRSbinPath $firstDSRSpath
+    fi
+
+    if [[ $dsFamily -eq 3 ]];then
+        createDepKey $firstDSRSbinPath $firstDSRSpath
+    fi
+
+    # Insert hostNames into /etc/hosts file
+    #
+    insertHostNames
+fi
+
+
 
 #END
