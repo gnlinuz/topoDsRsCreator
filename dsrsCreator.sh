@@ -13,25 +13,35 @@
 
 clear
 
-# **************************** SETTINGS ***********************************
-#                          !!! important !!!
-# you MUST change the below settings to meet your installation requirments!
+# ******************************************** SETTINGS ******************************************************************
+# ************************************************************************************************************************
+# ************************************************************************************************************************
+#                                         !!! important !!!
 #
-# *************************************************************************
-#Destination path will be in the format /opt/ds7xRepl0, /opt/ds7xRepl1, /opt/ds7xRepl2, /opt/ds7xRepl3, /opt/ds7xReplx ...
+# Optional:         Change the below settings to meet your installation requirments!
+#
+# ************************************************************************************************************************
+# ************************************************************************************************************************
+#Destination path will be in the format ~/dsrsTopo1, ~/dsrsTopo2,
 destPath=~/dsrsTopo
 
-#Path for stand alone DS RS servers
+#Path for stand alone DS RS servers ex. dsrsTopoDS1 or dsrsTopoRS1 etc
 #
 dsAlonePath=${destPath}DS
 rsAlonePath=${destPath}RS
 
-#hostname will be in format ds0.example.com, ds1.example.com, ds2.example.com, dsx.example.com
-hostName=ds
+#hostname will be in format dsrs1.example.com, dsrs2.example.com, dsOnly1.example.com, rsOnly1.example.com etc
+hostName=dsrs
+dsOnlyHostName=dsOnly
+rsOnlyHostName=rsOnly
 domain=.example.com
 
 #serverId will be in the format MASTER0, MASTER1, MASTER2, MASTERx
 srvID=MASTER
+
+#for servers earlier than ds 7.x server id must be numeric
+#
+numericSeerverID=100
 
 #password to be used for uid=admin for uid=Monitor cn=Directory Manager
 installationPassword=DrowssaP
@@ -71,10 +81,16 @@ profileBaseDN=(dc=example,dc=com ou=tokens ou=am-config ou=identities dc=openidm
 setupPath=${destPath}0/opendj
 binPath=$setupPath/bin/
 
-firstDSRSpath=${dsAlonePath}0/opendj
-firstDSRSbinPath=${firstDSRSpath}/bin/
+firstDSpath=${dsAlonePath}0/opendj
+firstDSbinPath=${firstDSpath}/bin/
+
+firstRSpath=${rsAlonePath}0/opendj
+firstRSbinPath=${firstRSpath}/bin/
+
 
 tput civis
+
+
 
 
 
@@ -391,8 +407,25 @@ printMsg()
 }
 
 
+unzipDSRSsetupFile()
+{
+    local destinationPath=$1
+    local numberOfServer=$2
+    printf "Unzipping files to directories...\n"
+    for (( dir=0; dir<$numberOfServer; dir++ ))
+    do
+        unzip $selectedVersion -d $destinationPath${dir} 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 0 $process_id
+        unzipMessage
+    done
+}
+
+
 insertHostNames()
 { 
+  hNmame=$1
+  nServers=$2  
   cp /etc/hosts /etc/hosts.backup
   if [ $? -eq 0 ];then
           printf "backup /etc/hosts hosts.backup..Done\n"
@@ -404,13 +437,13 @@ insertHostNames()
   	exit -1
   fi
 
-  for (( name=0; name<$noOfServers; name++ ))
+  for (( name=0; name<$nServers; name++ ))
   do
-  cat /etc/hosts |grep "$hostName${name}$domain"
+  cat /etc/hosts |grep "$hNmame${name}$domain"
   if [ $? -eq 0 ];then
           printf "hostNames already exist on /etc/hosts..Done\n"
   else
-          sed -i '' "/127.0.0.1/ s/$/ ${hostName}${name}${domain}/" /etc/hosts
+          sed -i '' "/127.0.0.1/ s/$/ ${hNmame}${name}${domain}/" /etc/hosts
   fi
 
   done
@@ -420,17 +453,31 @@ insertHostNames()
 
 startServers()
 {
+    local noOfDS=$1
+    local dPath=$2
     printf "Starting DS/RS servers...\n"
-    for (( startServer=0; startServer<$noOfServers; startServer++ ))
+    for (( startServer=0; startServer<$noOfDS; startServer++ ))
     do
-        $destPath${startServer}/opendj/bin/./start-ds
+        $dPath${startServer}/opendj/bin/./start-ds
         process_id=$!
         wait $process_id
         printf "Server$startServer started..Done\n\n\n"
     done
 }
 
+startServersStandAlone()
+{
+    if [[ dsNumber -gt 0 ]]; then
+        printf "Starting stand alone DS servers...\n"
+        startServers $dsNumber $dsAlonePath
+    fi
 
+    if [[ rsNumber -gt 0 ]]; then
+        printf "Starting stand alone RS servers...\n"
+        startServers $rsNumber $rsAlonePath
+    fi
+    
+}
 
 exportKey()
 {
@@ -438,7 +485,6 @@ exportKey()
   export depKey
   printf "DEPLOYMENT_KEY/ID: $depKey\n"
 }
-
 
 
 createDepKey()
@@ -449,7 +495,7 @@ createDepKey()
   $theBinPath/dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
   commandResult=$?
   printMsg $commandResult
-  exportKey $theSetupPath
+  exportKey
 }
 
 
@@ -461,15 +507,13 @@ createDepKey2()
   $theBinPath./dskeymgr create-deployment-key --deploymentKeyPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
   commandResult=$?
   printMsg $commandResult
-  exportKey $theSetupPath
+  exportKey
 }
 
-
+# Create installation text for normal DS RS servers
+#
 installationText()
 {
-  # Create INSTALLATION text
-  # ldap ldaps admin replication replication port https
-  #
   ldd=$1
   ldss=$2
   admm=$3
@@ -549,8 +593,225 @@ installationText()
 }
 
 
-exStatusCommand()
+# Create installation text for stand alone DS RS servers
+#
+installationText2()
 {
+  # Create INSTALLATION text for stand alone DS RS servers
+  # ldap ldaps admin replication replication port https
+  #
+  ldd=$1
+  ldss=$2
+  admm=$3
+  repp=$4
+  repbb=$4
+  htps=$5
+  dsNum=$6
+  rsNum=$7
+  dsOnlyHName=$8
+  rsOnlyHName=$9
+
+  local num=0
+  printf "Installation instructions..\n\n\n" > $firstDSpath/INSTALLATION
+  
+  #create bootstrapServers only when there are RS servers to be installed
+  if [[ $rsNum -gt 0 ]]; then
+    for (( b=0; b<$rsNum; b++ ))
+    do
+        bootStrapSrv="$bootStrapSrv--bootstrapReplicationServer $rsOnlyHName${b}$domain:$repbb\n"
+        ((repbb++))
+    done
+  fi
+  
+  #create ds only servers
+  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]];then
+       #add bootstrapServers to ds only servers only when RS servers to be installed
+       if [[ $rsNum -gt 0 ]]; then 
+        for (( i=0; i<$dsNum; i++ ))
+            do
+                setupCommand="$dsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $dsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n${bootStrapSrv}${installationProfile}  \ \n--acceptLicense"
+
+                printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION
+                ((ldd++))
+                ((admm++))
+                ((ldss++))
+                ((htps++))
+            done
+       fi
+  fi
+
+
+  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]];then     
+        #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
+        if [[ $rsNum -lt 1 ]]; then 
+         for (( i=0; i<$dsNum; i++ ))
+            do
+                setupCommand="$dsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $dsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n${installationProfile}  \ \n--acceptLicense"
+
+                printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION
+                ((ldd++))
+                ((admm++))
+                ((ldss++))
+                ((htps++))
+            done 
+        fi
+
+  fi
+
+  #create the rs only servers
+  if [[ $dsFamily -eq 2 && rsNum -gt 0 ]];then
+       for (( i=0; i<$rsNum; i++ ))
+        do
+             setupCommand="$rsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $depKey \ \n--adminConnectorPort $admm \ \n--hostName $rsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv}  \ \n--acceptLicense"
+             #if only RS servers is installed then create the installation text to the first RS server
+             if [[ $dsNum -lt 1 ]]; then
+                printf "$setupCommand\n\n\n" >> $firstRSpath/INSTALLATION
+             else
+                printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION    
+             fi
+             ((admm++))
+             ((repp++))
+        done
+  fi
+
+
+  #create ds only servers
+  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]];then
+       #add bootstrapServers to ds only servers only when RS servers to be installed
+       if [[ $rsNum -gt 0 ]]; then 
+        for (( i=0; i<$dsNum; i++ ))
+            do
+                setupCommand="$dsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $dsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n${bootStrapSrv}${installationProfile} \ \n--acceptLicense"
+
+                printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION
+                ((ldd++))
+                ((admm++))
+                ((ldss++))
+                ((htps++))
+            done
+       fi
+  fi 
+
+  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]];then
+        #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
+        if [[ $rsNum -lt 1 ]]; then   
+            for (( i=0; i<$dsNum; i++ ))
+                do
+                    setupCommand="$dsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $depKey \ \n--ldapPort $ldd \ \n--adminConnectorPort $admm \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpsPort $htps \ \n--hostName $dsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n${installationProfile} \ \n--acceptLicense"
+
+                    printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION
+                    ((ldd++))
+                    ((admm++))
+                    ((ldss++))
+                    ((htps++))
+                done
+       fi     
+  fi
+
+  #create the RS servers
+  if [[ $dsFamily -eq 3 && rsNum -gt 0 ]];then 
+    for (( i=0; i<$dsNum; i++ ))
+        do
+            setupCommand="$rsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $depKey \ \n--adminConnectorPort $admm \ \n--hostName $rsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv} \ \n--acceptLicense"
+
+            if [[ $dsNum -lt 1 ]]; then
+                printf "$setupCommand\n\n\n" >> $firstRSpath/INSTALLATION
+             else
+                printf "$setupCommand\n\n\n" >> $firstDSpath/INSTALLATION    
+             fi
+            ((admm++))
+            ((repp++))
+        done     
+  fi
+
+
+  if [ $dsNum -gt 1 ];then
+
+    case "$dsProfile" in
+    1) bDN=${profileBaseDN[0]}
+       # dsEval
+       ;;
+    2) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    3) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    4) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    5) bDN=${profileBaseDN[2]}
+       # amConfig
+       ;;
+    6) bDN=${profileBaseDN[3]}
+       # amIdentities
+       ;;
+    7) bDN=${profileBaseDN[4]}
+       # idmRepo
+       ;;         
+    *)
+       ;;   
+    esac
+
+    initReplication="$firstDSbinPath./dsrepl initialize \\n--baseDN $bDN \\n--toAllServers \\n--hostname $dsOnlyHName${num}$domain \\n--port $adminPort \\n--bindDN "uid=admin" \\n--bindPassword $installationPassword \\n--trustStorePath $firstDSpath/config/keystore \\n--trustStorePasswordFile $firstDSpath/config/keystore.pin \\n--no-prompt"
+    printf "$initReplication\n\n\nDEPLOYMENT_KEY:$depKey\nPassword: $installationPassword\n" >> $firstDSpath/INSTALLATION
+  fi  
+}
+
+
+
+
+
+
+
+
+
+# Create installation text for DS 6.5.x
+#
+installation65xText()
+{
+  ldd=$1
+  ldss=$2
+  admm=$3
+  htp=$4
+  htps=$5
+  
+  local num=0
+  printf "Installation instructions..\n\n\n" > $setupPath/INSTALLATION
+
+  for (( i=0; i<$noOfServers; i++ ))
+        do
+             setupCommand="$destPath${i}/opendj/./setup directory-server \ \n--rootUserDN cn=Directory Manager \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--hostName $hostName${i}$domain \ \n--ldapPort $ldd \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpPort $htp \ \n--httpsPort $htps \ \n--adminConnectorPort $admm \ \n${installationProfile} \ \n--acceptLicense"
+
+             printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
+             ((ldd++))
+             ((admm++))
+             ((ldss++))
+             ((htp++))
+             ((htps++))
+        done
+
+
+  for (( i=0; i<$noOfServers; i++ ))
+        do
+             setupCommand="$binPath${i}./dsconfig set-global-configuration-prop \ \n--hostName $hostName${i}$domain \ \n--adminConnectorPort $admm \ \n--bindDN cn=Directory Manager \ \n--bindPassword $installationPassword \ \n--set server-id:$numericSeerverID \ \n--trustAll \ \n--no-prompt"     
+
+        done
+
+
+
+}
+
+
+
+
+
+
+
+exStatusCommand()
+{   local srvBinPath=$1
+    local hName=$2
+    local sPath=$3
     local num=0
     $binPath./dsrepl status --showGroups --showReplicas --hostname $hostName${num}$domain --port $adminPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $setupPath/config/keystore --trustStorePassword:file $setupPath/config/keystore.pin --no-prompt
 }
@@ -572,7 +833,7 @@ createStartStop()
 }
 
 
-# Execute setup for ds version 7x
+# Execute setup for normal ds rs servers version 7x
 #
 execute7xSetup()
 {
@@ -594,7 +855,7 @@ execute7xSetup()
 
   if [ $dsFamily -eq 2 ];then
 
-    for (( i=0; i<$noServers; i++ ))
+    for (( i=0; i<$noOfServers; i++ ))
     do
         ${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld  --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
         process_id=$!
@@ -624,7 +885,7 @@ execute7xSetup()
       done
   fi
 
-  startServers
+  startServers $noOfServers $destPath
 
   if [ $noOfServers -gt 1 ];then
     printf "starting replication initialisation please wait..\n"
@@ -661,26 +922,167 @@ execute7xSetup()
 
 
 
-unzipDSRSsetupFile()
+# Execute setup for stand alone ds rs servers version 7x
+#
+executeStandAlone7xSetup()
 {
-    local destinationPath=$1
-    local numberOfServer=$2
-    printf "Unzipping files to directories...\n"
-    for (( dir=0; dir<$numberOfServer; dir++ ))
-    do
-        unzip $selectedVersion -d $destinationPath${dir} 2>&1 >/dev/null &
-        process_id=$!
-        progressBar2 0 $process_id
-        unzipMessage
-    done
+  ld=$1
+  lds=$2
+  adm=$3
+  rep=$4
+  repb=$4
+  htps=$5
+  dsNum=$6
+  rsNum=$7
+  dsOnlyHName=$8
+  rsOnlyHName=$9
+  local num=0
+  printf "executing DS ./setup command...\n"
+  
+  #create bootStrapServer when rs servers are installed
+  if [[ $rsNum -gt 0 ]]; then
+    for (( b=0; b<$rsNum; b++ ))
+        do
+            bootStrapServers=$bootStrapServers" "--bootstrapReplicationServer" "${rsOnlyHName}${b}${domain}:${repb}
+            ((repb++))
+        done
+  fi
+
+  #create ds only servers
+  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]]; then
+       #add bootstrapServers to ds only servers only when RS servers to be installed
+       if [[ $rsNum -gt 0 ]]; then 
+
+            for (( i=0; i<$dsNum; i++ ))
+                do
+                    ${dsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsOnlyHName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld  --enableStartTLS --ldapsPort $lds --httpsPort $htps ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+                    process_id=$!
+                    progressBar2 1 $process_id
+                    ((ld++))
+                    ((adm++))
+                    ((lds++))
+                    ((htps++))
+                    setupMessage
+                done
+        fi
+  fi      
+
+  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]]; then     
+        #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
+        if [[ $rsNum -lt 1 ]]; then 
+
+            for (( i=0; i<$dsNum; i++ ))
+                do
+                    ${dsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsOnlyHName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld  --enableStartTLS --ldapsPort $lds --httpsPort $htps ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+                    process_id=$!
+                    progressBar2 1 $process_id
+                    ((ld++))
+                    ((adm++))
+                    ((lds++))
+                    ((htps++))
+                    setupMessage
+                done
+        fi
+  fi
+
+  #create the rs only servers
+  if [[ $dsFamily -eq 2 && rsNum -gt 0 ]]; then
+        or (( i=0; i<$rsNum; i++ ))
+                do
+                    ${rsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort $repp ${bootStrapServers} --acceptLicense 2>&1 >/dev/null &
+                    process_id=$!
+                    progressBar2 1 $process_id
+                    ((adm++))
+                    ((rep++))
+                    setupMessage
+                done
+        fi
+  fi
+
+
+  #create ds only servers
+  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]]; then
+       #add bootstrapServers to ds only servers only when RS servers to be installed
+       if [[ $rsNum -gt 0 ]]; then 
+            for (( i=0; i<$dsNum; i++ ))
+            do
+                ${dsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsOnlyHName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+                process_id=$!
+                progressBar2 1 $process_id
+                ((ld++))
+                ((adm++))
+                ((lds++))
+                ((htps++))
+                setupMessage
+            done
+       fi
+  fi
+  
+  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]]; then
+        #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
+        if [[ $rsNum -lt 1 ]]; then
+            for (( i=0; i<$dsNum; i++ ))
+            do
+                ${dsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsOnlyHName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+                process_id=$!
+                progressBar2 1 $process_id
+                ((ld++))
+                ((adm++))
+                ((lds++))
+                ((htps++))
+                setupMessage
+            done
+       fi
+  fi
+
+  #create the RS servers
+  if [[ $dsFamily -eq 3 && rsNum -gt 0 ]]; then 
+        for (( i=0; i<$rsNum; i++ ))
+            do
+                ${rsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+                process_id=$!
+                progressBar2 1 $process_id
+                ((adm++))
+                ((rep++))
+                setupMessage
+            done
+       fi
+  fi
+
+  startServersStandAlone
+
+  if [ $dsNum -gt 1 ];then
+    printf "starting replication initialisation please wait..\n"
+    sleep 10
+    case "$dsProfile" in
+    1) bDN=${profileBaseDN[0]}
+       # dsEval
+       ;;
+    2) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    3) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    4) bDN=${profileBaseDN[1]}
+       # cts
+       ;;
+    5) bDN=${profileBaseDN[2]}
+       # amConfig
+       ;;
+    6) bDN=${profileBaseDN[3]}
+       # amIdentities
+       ;;
+    7) bDN=${profileBaseDN[4]}
+       # idmRepo
+       ;;         
+    *)
+       ;;   
+    esac 
+    $firstDSbinPath./dsrepl initialize --baseDN $bDN --toAllServers --hostname $dsOnlyHName${num}$domain --port $adminPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $firstDSpath/config/keystore --trustStorePasswordFile $firstDSpath/config/keystore.pin --no-prompt
+    printf "Replication initialisation started..\n\n"
+  fi
 }
-
-
-
-
-
-
-
 
 
 
@@ -700,12 +1102,21 @@ endOfInstallation()
 # ******************************************************************************
 # ******************************************************************************
 
-printf "      Topology Creator\n"
-printf "*****************************\n"
-printf "\n"
-
-printf "  Please select DS family\n"
-printf "*****************************\n"
+printf "                            Universal topology Creator\n"
+printf "************************************************************************************\n"
+printf "************************************************************************************\n"
+printf "Creation of hostnames by category:\n"
+printf "DS-RS servers: dsrs1.example.com, dsrs2.example.com\n"
+printf "DS only servers: dsOnly1.example.com, dsOnly2.example.com\n"
+printf "RS only servers: rsOnly1.example.com, rsOnly2.example.com\n"
+printf "Default installation directory: $destPath\n"
+printf "Default installation password: $installationPassword\n"
+printf "Default serverID: ${srvID}x\n"
+printf "Default ports: ldap:${ldapPort}, ldaps:${ldapsPort}, https:${httpsPort}, replication:${replPort}, admin:${adminPort}\n"
+printf "************************************************************************************\n"
+printf "************************************************************************************\n"
+printf "                            Please select DS family\n"
+printf "************************************************************************************\n"
 printf "1. DS 5.x - DS 6.x\n"
 printf "2. DS 7.0.x - DS 7.1.x\n"
 printf "3. DS 7.2.x - DS 7.3x and up\n"
@@ -992,16 +1403,16 @@ if [[ $typeOfInstallation -eq 1 ]]; then
     # Create deployment key
     #
     if [[ $dsFamily -eq 2 ]];then
-        createDepKey2 $destPath $setupPath
+        createDepKey2 $binPath $setupPath
     fi
 
     if [[ $dsFamily -eq 3 ]];then
-        createDepKey $destPath
+        createDepKey $binPath $setupPath
     fi
 
     # Insert hostNames into /etc/hosts file
     #
-    insertHostNames
+    insertHostNames $hostName $noOfServers
 
     # Call function to create installation text
     #
@@ -1013,7 +1424,7 @@ if [[ $typeOfInstallation -eq 1 ]]; then
 
     # Execute status command
     #
-    exStatusCommand
+    exStatusCommand $binPath $hostName $destPath
 
     # Create start stop command for all servers
     #
@@ -1028,8 +1439,8 @@ fi
 
 
 
-
-
+#Installation of stand alone Ds and RS servers
+#
 if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
     # Call function to check the product ds Family and Version
     #
@@ -1042,14 +1453,18 @@ if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
     if [[ dsNumber -gt 0 ]];then
         selectProfile $dsProfile
     fi
+
+
     # Call function to check for Java environment
     #
     checkJava
+
 
     # Call function to check if netstat/lsof is installed and then check all the ports to avoid conflicts..
     #
     # netstat -V &>/dev/null
     checkLsof
+
 
     # checkPorts for stand alone DS and RS servers
     #
@@ -1074,11 +1489,119 @@ if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
         done
     fi
 
+
     # Call function to check for existing directories
     # and create new directories
     #
     checkDirectories $dsAlonePath $dsNumber
     checkDirectories $rsAlonePath $rsNumber
+
+    # Call function to check if unzip utility exists
+    #
+    checkUnzip
+
+
+    # Call function to check if DS-7.x.x.zip file exist on the directory
+    #
+    checkFileZip $selectedVersion
+
+
+    # Unzip files to directories
+    #
+    unzipDSRSsetupFile $dsAlonePath $dsNumber
+    unzipDSRSsetupFile $rsAlonePath $rsNumber
+
+
+    # Create deployment key
+    #
+    if [[ $dsFamily -eq 2 ]]; then
+        if [[ dsNumber -gt 0 ]]; then    
+            createDepKey2 $firstDSbinPath $firstDSpath
+        else
+            createDepKey2 $firstRSbinPath $firstRSpath
+        fi    
+    fi
+
+    if [[ $dsFamily -eq 3 ]]; then
+        if [[ dsNumber -gt 0 ]]; then    
+            createDepKey $firstDSbinPath $firstDSpath
+        else
+            createDepKey $firstRSbinPath $firstRSpath
+        fi
+    fi
+
+
+    # Insert hostNames into /etc/hosts file
+    #
+    if [[ dsNumber -gt 0 ]]; then
+        insertHostNames $dsOnlyHostName $dsNumber
+    fi
+
+    if [[ rsNumber -gt 0 ]]; then
+        insertHostNames $rsOnlyHostName $rsNumber
+    fi
+
+    # Call function to create installation text for ds rs only servers
+    #
+    installationText2 $ldapPort $ldapsPort $adminPort $replPort $httpsPort $dsNumber $rsNumber $dsOnlyHostName $rsOnlyHostName
+
+
+    # Call function to excute installation for stand alone ds rs only servers
+    #
+    executeStandAlone7xSetup $ldapPort $ldapsPort $adminPort $replPort $httpsPort $dsNumber $rsNumber $dsOnlyHostName $rsOnlyHostName
+
+    
+    # Execute status command
+    #
+    if [[ dsNumber -gt 0 ]];then
+        exStatusCommand $firstDSbinPath $dsOnlyHostName $dsAlonePath
+    fi
+
+    # Create start stop command for all servers
+    #
+    #createStartStop
+    #currently left this out
+
+    # End of installation message
+    #
+    endOfInstallation
+fi
+
+
+# Installation of normal DS/RS servers at version DS 6.5.x
+# 
+if [[ $dsFamily -eq 1 && dsVersion -gt 6 ]]; then
+
+    # Call function to check the product ds Family and Version and get in return the selected ds version
+    #
+    sselectedFamilyVersion $dsFamily $dsVersion
+
+    # Call function to select profile and get in return the selected profile for the installation to be used
+    # available from ds version ds 6.5.x and on
+    #
+    selectProfile $dsProfile
+
+    # Call function to check for Java environment
+    #
+    checkJava
+
+    # Call function to check if netstat/lsof is installed and then check all the ports to avoid conflicts..
+    #
+    # netstat -V &>/dev/null
+    checkLsof
+
+    # checkPorts for DS/RS servers
+    #
+    for j in $ldapPort $ldapsPort $httpsPort $replPort $adminPort
+    do
+        printf "Checking protocol port: $j\n"
+        checkPorts $j $noOfServers
+    done
+
+    # Call function to check for existing directories
+    # and create new directories
+    #
+    checkDirectories $destPath $noOfServers
 
     # Call function to check if unzip utility exists
     #
@@ -1090,24 +1613,45 @@ if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
 
     # Unzip files to directories
     #
-    unzipDSRSsetupFile $dsAlonePath $dsNumber
-    unzipDSRSsetupFile $rsAlonePath $rsNumber
-
-
-    # Create deployment key
-    #
-    if [[ $dsFamily -eq 2 ]];then
-        createDepKey2 $firstDSRSbinPath $firstDSRSpath
-    fi
-
-    if [[ $dsFamily -eq 3 ]];then
-        createDepKey $firstDSRSbinPath $firstDSRSpath
-    fi
+    printf "Unzipping files to directories...\n"
+    printf "\n"
+    printf "Check for number of servers are: $noOfServers"
+    printf "\n"
+    for (( dir=0; dir<$noOfServers; dir++ ))
+    do
+        unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 0 $process_id
+        unzipMessage
+    done
 
     # Insert hostNames into /etc/hosts file
     #
-    insertHostNames
+    insertHostNames $hostName $noOfServers
+
+    # Call function to create installation text
+    #
+    installationText $ldapPort $ldapsPort $adminPort $replPort $httpsPort
+
+    # Call function to execute installation of DS/RS 7.x family
+    #
+    execute7xSetup $ldapPort $ldapsPort $adminPort $replPort $httpsPort
+
+    # Execute status command
+    #
+    exStatusCommand $binPath $hostName $destPath
+
+    # Create start stop command for all servers
+    #
+    createStartStop
+
+    # End of installation message
+    #
+    endOfInstallation
 fi
+
+
+
 
 
 
