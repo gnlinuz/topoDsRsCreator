@@ -547,10 +547,9 @@ replicationStatus65x()
 {
     local srvBinPath=$1
     local hName=$2
-    local sPath=$3
     local num=0
 
-    $binPath./dsreplication status --hostname $hName${num}$domain --port adminPort --adminUid admin --adminPassword $installationPassword --no-prompt --trustAll
+    $srvBinPath./dsreplication status --hostname $hName${num}$domain --port adminPort --adminUid admin --adminPassword $installationPassword --no-prompt --trustAll
 }
 
 
@@ -644,7 +643,7 @@ installationText2()
   fi
   
   #create ds only servers
-  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]];then
+  if [[ $dsFamily -eq 2 && $dsNum -gt 0 ]];then
        #add bootstrapServers to ds only servers only when RS servers to be installed
        if [[ $rsNum -gt 0 ]]; then 
         for (( i=0; i<$dsNum; i++ ))
@@ -661,7 +660,7 @@ installationText2()
   fi
 
 
-  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]];then     
+  if [[ $dsFamily -eq 2 && $dsNum -gt 0 ]];then     
         #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
         if [[ $rsNum -lt 1 ]]; then 
          for (( i=0; i<$dsNum; i++ ))
@@ -679,7 +678,7 @@ installationText2()
   fi
 
   #create the rs only servers
-  if [[ $dsFamily -eq 2 && rsNum -gt 0 ]];then
+  if [[ $dsFamily -eq 2 && $rsNum -gt 0 ]];then
        for (( i=0; i<$rsNum; i++ ))
         do
              setupCommand="$rsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentKeyPassword $installationPassword \ \n--deploymentKey $depKey \ \n--adminConnectorPort $admm \ \n--hostName $rsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv}  \ \n--acceptLicense"
@@ -696,7 +695,7 @@ installationText2()
 
 
   #create ds only servers
-  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]];then
+  if [[ $dsFamily -eq 3 && $dsNum -gt 0 ]];then
        #add bootstrapServers to ds only servers only when RS servers to be installed
        if [[ $rsNum -gt 0 ]]; then 
         for (( i=0; i<$dsNum; i++ ))
@@ -712,7 +711,7 @@ installationText2()
        fi
   fi 
 
-  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]];then
+  if [[ $dsFamily -eq 3 && $dsNum -gt 0 ]];then
         #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
         if [[ $rsNum -lt 1 ]]; then   
             for (( i=0; i<$dsNum; i++ ))
@@ -729,7 +728,7 @@ installationText2()
   fi
 
   #create the RS servers
-  if [[ $dsFamily -eq 3 && rsNum -gt 0 ]];then 
+  if [[ $dsFamily -eq 3 && $rsNum -gt 0 ]];then 
     for (( i=0; i<$dsNum; i++ ))
         do
             setupCommand="$rsAlonePath${i}/opendj/./setup \ \n--rootUserDN "uid=admin" \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--deploymentIdPassword $installationPassword \ \n--deploymentId $depKey \ \n--adminConnectorPort $admm \ \n--hostName $rsOnlyHName${i}$domain \ \n--serverId $srvID${i} \ \n--replicationPort $repp \ \n${bootStrapSrv} \ \n--acceptLicense"
@@ -830,86 +829,9 @@ installation65xText()
 
             printf "$setupCommand\n\n\n" >> $setupPath/INSTALLATION
         done
-
-
 }
 
 
-execute656xSetup()
-{
-  ldd=$1
-  ldss=$2
-  admm=$3
-  adm=$3
-  htp=$4
-  htps=$5
-  sID=$6
-  rPort=$7
-  repPort=$7
-  
-  local firstSrv=0
-  local num=0
-  local j=0
-
-  selectedDN $dsProfile
-
-  printf "executing DS ./setup command...\n"
-
-  # If number of servers is 1 then the script should abort installation and warn that 2 or more servers needed otherwise install stand alone servers
-
-  #install 65x servers
-  for (( i=0; i<$noOfServers; i++ ))
-    do
-        $destPath${i}/opendj/./setup directory-server --rootUserDN 'cn=Directory Manager' --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName $hostName${i}$domain --ldapPort $ldd --enableStartTLS --ldapsPort $ldss --httpPort $htp --httpsPort $htps --adminConnectorPort $adm ${installationProfile} --acceptLicense 2>&1 >/dev/null &
-        process_id=$!
-        progressBar2 1 $process_id
-        ((adm++))
-        ((ld++))
-        ((lds++))
-        ((htp++))
-        ((htps++))
-        setupMessage
-    done
-
-  startServers $noOfServers $destPath
-
-  #create server ID for each server
-  adm=$admm
-  for (( i=0; i<$noOfServers; i++ ))
-        do
-             $destPath${i}/opendj/bin/./dsconfig set-global-configuration-prop --hostName $hostName${i}$domain --adminConnectorPort $adm --bindDN 'cn=Directory Manager' --bindPassword $installationPassword --set server-id:${sID} --trustAll --no-prompt 2>&1 >/dev/null &
-             process_id=$!
-             wait $process_id
-             ((sID++))
-             ((adm++))
-        done  
-
-  #configure the replication
-  adm=$admm
-  for (( i=0; i<$noOfServers; i++ ))
-        do
-            ((j++))
-            ((adm++))
-            ((repPort++))
-            ${destPath}${firstSrv}/opendj/bin/./dsreplication configure --adminUID admin --adminPassword $installationPassword--baseDN $bDN --host1 ${hostName}${firstSrv}${domain} --port1 $adminPort --bindDN1 'cn=Directory Manager' --bindPassword1 $installationPassword --replicationPort1 $replPort --host2 $hostName${j}$domain --port2 ${adm} --bindDN2 'cn=Directory Manager' --bindPassword2 $installationPassword --replicationPort2 ${repPort} --trustAll --no-prompt 2>&1 >/dev/null &
-            process_id=$!
-            wait $process_id
-        done 
-
-
-  #initialise the replication
-  j=0
-  adm=$admm
-  for (( i=0; i<$noOfServers; i++ ))
-        do
-            ((j++))
-            ((adm++))
-            ${destPath}${firstSrv}/opendj/bin/./dsreplication initialize --adminUID admin --adminPassword $installationPassword --baseDN $bDN --hostSource ${hostName}${firstSrv}${domain} --portSource $adminPort --hostDestination $hostName${j}$domain --portDestination ${adm} --trustAll --no-prompt 2>&1 >/dev/null &
-            process_id=$!
-            wait $process_id
-        done
-
-} 
 
 
 
@@ -1049,7 +971,7 @@ executeStandAlone7xSetup()
         fi
   fi      
 
-  if [[ $dsFamily -eq 2 && dsNum -gt 0 ]]; then     
+  if [[ $dsFamily -eq 2 && $dsNum -gt 0 ]]; then     
         #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
         if [[ $rsNum -lt 1 ]]; then 
 
@@ -1068,7 +990,7 @@ executeStandAlone7xSetup()
   fi
 
   #create the rs only servers
-  if [[ $dsFamily -eq 2 && rsNum -gt 0 ]]; then
+  if [[ $dsFamily -eq 2 && $rsNum -gt 0 ]]; then
         or (( i=0; i<$rsNum; i++ ))
                 do
                     ${rsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort $repp ${bootStrapServers} --acceptLicense 2>&1 >/dev/null &
@@ -1083,7 +1005,7 @@ executeStandAlone7xSetup()
 
 
   #create ds only servers
-  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]]; then
+  if [[ $dsFamily -eq 3 && $dsNum -gt 0 ]]; then
        #add bootstrapServers to ds only servers only when RS servers to be installed
        if [[ $rsNum -gt 0 ]]; then 
             for (( i=0; i<$dsNum; i++ ))
@@ -1100,7 +1022,7 @@ executeStandAlone7xSetup()
        fi
   fi
   
-  if [[ $dsFamily -eq 3 && dsNum -gt 0 ]]; then
+  if [[ $dsFamily -eq 3 && $dsNum -gt 0 ]]; then
         #do not add bootstrapServers to ds only servers since there are no RS servers to be installed
         if [[ $rsNum -lt 1 ]]; then
             for (( i=0; i<$dsNum; i++ ))
@@ -1118,7 +1040,7 @@ executeStandAlone7xSetup()
   fi
 
   #create the RS servers
-  if [[ $dsFamily -eq 3 && rsNum -gt 0 ]]; then 
+  if [[ $dsFamily -eq 3 && $rsNum -gt 0 ]]; then 
         for (( i=0; i<$rsNum; i++ ))
             do
                 ${rsAlonePath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
@@ -1144,7 +1066,81 @@ executeStandAlone7xSetup()
 }
 
 
+execute656xSetup()
+{
+  ldd=$1
+  ldss=$2
+  admm=$3
+  adm=$3
+  htp=$4
+  htps=$5
+  sID=$6
+  rPort=$7
+  repPort=$7
+  
+  local firstSrv=0
+  local num=0
+  local j=0
 
+  selectedDN $dsProfile
+
+  printf "executing DS ./setup command...\n"
+
+  # If number of servers is 1 then the script should abort installation and warn that 2 or more servers needed otherwise install stand alone servers
+
+  #install 65x servers
+  for (( i=0; i<$noOfServers; i++ ))
+    do
+        $destPath${i}/opendj/./setup directory-server --rootUserDN 'cn=Directory Manager' --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName $hostName${i}$domain --ldapPort $ldd --enableStartTLS --ldapsPort $ldss --httpPort $htp --httpsPort $htps --adminConnectorPort $adm ${installationProfile} --acceptLicense 2>&1 >/dev/null &
+        process_id=$!
+        progressBar2 1 $process_id
+        ((adm++))
+        ((ld++))
+        ((lds++))
+        ((htp++))
+        ((htps++))
+        setupMessage
+    done
+
+  startServers $noOfServers $destPath
+
+  #create server ID for each server
+  adm=$admm
+  for (( i=0; i<$noOfServers; i++ ))
+        do
+             $destPath${i}/opendj/bin/./dsconfig set-global-configuration-prop --hostName $hostName${i}$domain --adminConnectorPort $adm --bindDN 'cn=Directory Manager' --bindPassword $installationPassword --set server-id:${sID} --trustAll --no-prompt 2>&1 >/dev/null &
+             process_id=$!
+             wait $process_id
+             ((sID++))
+             ((adm++))
+        done  
+
+  #configure the replication
+  adm=$admm
+  for (( i=0; i<$noOfServers; i++ ))
+        do
+            ((j++))
+            ((adm++))
+            ((repPort++))
+            ${destPath}${firstSrv}/opendj/bin/./dsreplication configure --adminUID admin --adminPassword $installationPassword--baseDN $bDN --host1 ${hostName}${firstSrv}${domain} --port1 $adminPort --bindDN1 'cn=Directory Manager' --bindPassword1 $installationPassword --replicationPort1 $replPort --host2 $hostName${j}$domain --port2 ${adm} --bindDN2 'cn=Directory Manager' --bindPassword2 $installationPassword --replicationPort2 ${repPort} --trustAll --no-prompt 2>&1 >/dev/null &
+            process_id=$!
+            wait $process_id
+        done 
+
+
+  #initialise the replication
+  j=0
+  adm=$admm
+  for (( i=0; i<$noOfServers; i++ ))
+        do
+            ((j++))
+            ((adm++))
+            ${destPath}${firstSrv}/opendj/bin/./dsreplication initialize --adminUID admin --adminPassword $installationPassword --baseDN $bDN --hostSource ${hostName}${firstSrv}${domain} --portSource $adminPort --hostDestination $hostName${j}$domain --portDestination ${adm} --trustAll --no-prompt 2>&1 >/dev/null &
+            process_id=$!
+            wait $process_id
+        done
+
+} 
 
 
 
@@ -1702,7 +1698,7 @@ if [[ $dsFamily -eq 1 && dsVersion -gt 6 ]]; then
 
     # Execute status command
     #
-    exStatusCommand $binPath $hostName $destPath
+    replicationStatus65x $binPath $hostName
 
     # Create start stop command for all servers
     #
