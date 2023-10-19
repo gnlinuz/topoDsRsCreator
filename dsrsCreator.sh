@@ -94,12 +94,6 @@ tput civis
 
 
 
-
-
-
-
-
-
 # ************************** FUNCTIONS *****************************************
 # ******************************************************************************
 # ******************************************************************************
@@ -260,7 +254,11 @@ selectProfile()
 {
   profile=$1
   case "$profile" in
-  1) installationProfile=$dsEval
+  1) if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]]; then
+        installationProfile="--profile ds-evaluation "
+     else   
+        installationProfile=$dsEval
+     fi   
      ;;
   2) installationProfile=$dsAmCtsAmReap
      ;;
@@ -467,6 +465,7 @@ startServers()
     done
 }
 
+
 startServersStandAlone()
 {
     if [[ dsNumber -gt 0 ]]; then
@@ -480,6 +479,7 @@ startServersStandAlone()
     fi
     
 }
+
 
 exportKey()
 {
@@ -511,7 +511,6 @@ createDepKey2()
   printMsg $commandResult
   exportKey
 }
-
 
 
 selectedDN()
@@ -758,7 +757,7 @@ installationText2()
 
 
 # Create installation text for DS 6.5.x
-# $ldapPort $ldapsPort $admPort $hPort $hsPort $numericServerID $replPort
+# 
 installation65xText()
 {
   local ldd=$1
@@ -781,6 +780,7 @@ installation65xText()
   selectedDN $dsProfile
 
   # If number of servers is 1 then the script should abort installation and warn that 2 or more servers needed otherwise install stand alone servers
+  # DONE
 
   #create servers
   for (( i=0; i<$noOfServers; i++ ))
@@ -810,7 +810,6 @@ installation65xText()
   #configure the replication
   adm=$admm
   ((noSrv--))
-  printf "\n\n The number number of servers are: $noSrv \n "
   for (( i=0; i<$noSrv; i++ ))
         do
             ((j++))
@@ -835,9 +834,6 @@ installation65xText()
         done
   printf "\n Finish with text set up..\n"      
 }
-
-
-
 
 
 exStatusCommand()
@@ -1073,7 +1069,6 @@ executeStandAlone7xSetup()
 
 execute656xSetup()
 { 
-  #$ldapPort $ldapsPort $admPort $hPort $hsPort $numericServerID $replPort
   ldd=$1
   ldss=$2
   admm=$3
@@ -1094,6 +1089,7 @@ execute656xSetup()
   selectedDN $dsProfile
 
   # If number of servers is 1 then the script should abort installation and warn that 2 or more servers needed otherwise install stand alone servers
+  # DONE
 
   #install 65x servers
   for (( i=0; i<$noOfServers; i++ ))
@@ -1110,7 +1106,7 @@ execute656xSetup()
     done
 
   #startServers $noOfServers $destPath
-
+  printf "\n Preparing server IDs replication configuration and replication..\n"
   #create server ID for each server
   adm=$admm
   for (( i=0; i<$noOfServers; i++ ))
@@ -1147,7 +1143,6 @@ execute656xSetup()
             process_id=$!
             wait $process_id
         done
-#2>&1 >/dev/null &
 } 
 
 
@@ -1408,6 +1403,13 @@ if [[ $standAlone -eq 1 ]]; then
   done
   clear
 
+  while [[ $dsFamily -eq 1 && $dsVersion -gt 6 && $noOfServers -lt 2 ]]
+  do
+     printf "You need to choose more than 1 servers to be part of ds 6.5.x replication\n"
+     printf "otherwise select 2. Stand Alone DS RS servers\n"
+     read noOfServers
+  done
+
 fi
 
 
@@ -1505,8 +1507,6 @@ if [[ $dsFamily -gt 1 ]]; then
 fi
 
 
-
-
 #Installation of stand alone Ds and RS servers
 #
 printf "\n Installation of stand alone Ds and RS servers \n"
@@ -1598,7 +1598,6 @@ if [[ $typeOfInstallation -eq 1 && $standAlone -eq 2 ]]; then
             createDepKey $firstRSbinPath $firstRSpath
         fi
     fi
-
 
     # Insert hostNames into /etc/hosts file
     #
