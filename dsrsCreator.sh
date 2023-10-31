@@ -81,6 +81,13 @@ idmRepo="--profile idm-repo --set idm-repo/domain:forgerock.com "
 # idmRepo       dc=openidm,dc=forgerock,dc=com
 profileBaseDN=(dc=example,dc=com ou=tokens ou=am-config ou=identities dc=openidm,dc=forgerock,dc=com)
 
+
+# BaseDN for servers ds 5.x up to 6.0.x
+ds5xBaseDN=dc=example,dc=com
+
+# Ldif file to import for ds 5.x up to 6.0.x
+ldFile=Example.ldif
+
 # Path of the first installed server
 # and bin path
 setupPath=${destPath}0/opendj
@@ -173,31 +180,19 @@ selectedFamilyVersion()
   version=$2
   if [[ $family -eq 1 ]]; then
     case "$version" in
-      1) selectedVersion=DS-5.0.0.zip
+      1) selectedVersion=DS-6.5.0.zip
          ;;
-      2) selectedVersion=DS-5.5.0.zip
+      2) selectedVersion=DS-6.5.1.zip
          ;;
-      3) selectedVersion=DS-5.5.1.zip
+      3) selectedVersion=DS-6.5.2.zip
          ;;
-      4) selectedVersion=DS-5.5.2.zip
+      4) selectedVersion=DS-6.5.3.zip
          ;;
-      5) selectedVersion=DS-5.5.3.zip
+      5) selectedVersion=DS-6.5.4.zip
          ;;
-      6) selectedVersion=DS-6.0.0.zip
+      6) selectedVersion=DS-6.5.5.zip
          ;;
-      7) selectedVersion=DS-6.5.0.zip
-         ;;
-      8) selectedVersion=DS-6.5.1.zip
-         ;;
-      9) selectedVersion=DS-6.5.2.zip
-         ;;
-      10) selectedVersion=DS-6.5.3.zip
-         ;;
-      11) selectedVersion=DS-6.5.4.zip
-         ;;
-      12) selectedVersion=DS-6.5.5.zip
-         ;;
-      13) selectedVersion=DS-6.5.6.zip
+      7) selectedVersion=DS-6.5.6.zip
          ;;
       *)
     esac
@@ -386,13 +381,27 @@ checkFileZip()
   zipFile=$1
   printf "Checking for zip file..\n"
   if [ -f "$zipFile" ];then
-          printf "found,$zipFile..ok\n"
+          printf "found, $zipFile..ok\n"
   else
           printf "Can't find $zipFile file, please make sure to include\n"
           printf "the file on the same directory where you execute the script\n"
           printf "Installation failed!\n"
           tput cnorm
   	exit -1
+  fi
+}
+
+checkLdifFile()
+{
+  printf "Checking for Example.ldif file..\n"
+  if [ -f "$ldFile" ];then
+          printf "found, $ldFile..ok\n"
+  else
+          printf "Can't find $ldFile file, please make sure to include\n"
+          printf "the file on the same directory where you execute the script\n"
+          printf "Installation failed!\n"
+          tput cnorm
+    exit -1
   fi
 }
 
@@ -562,7 +571,7 @@ replicationStatus65x()
 }
 
 
-# Create installation text for normal DS RS servers
+# Create installation text for normal DS RS 7x servers
 #
 installationText()
 {
@@ -621,7 +630,7 @@ installationText()
 }
 
 
-# Create installation text for stand alone DS RS servers
+# Create installation text for stand alone DS RS 7x servers
 #
 installationText2()
 {
@@ -838,6 +847,83 @@ installation65xText()
   printf "\n Finish with text set up..\n"      
 }
 
+
+
+
+# Create installation text for stand alone DS 6.5.x
+# 
+installation65xStandAloneText()
+{ #             $ldPort $ldsPort $admPort $hPort $hsPort $numericServerID $replPort $dsOnlyHostName $rsOnlyHostName
+  ldd=$1
+  ldss=$2
+  admm=$3
+  htp=$4
+  htps=$5
+  sID=$6
+  rPort=$7
+  dsName=$8
+  rsName=$9
+
+  local firstSrv=0
+  local adm=$admm
+  local repPort=$rPort
+  local twoDs=2
+ 
+
+  printf "Installation instructions..\n\n\n" > $firstDSpath/INSTALLATION
+
+  selectedDN $dsProfile
+  
+  #create servers
+  for (( i=0; i<$twoDs; i++ ))
+        do
+            setupCommand1="$dsAlonePath${i}/opendj/./setup directory-server \ \n--rootUserDN cn=Directory Manager \ \n--rootUserPassword $installationPassword \ \n--monitorUserPassword $installationPassword \ \n--hostName ${dsName}${i}$domain \ \n--ldapPort $ldd \ \n--enableStartTLS \ \n--ldapsPort $ldss \ \n--httpPort $htp \ \n--httpsPort $htps \ \n--adminConnectorPort $adm \ \n${installationProfile} \ \n--acceptLicense"
+
+            printf "$setupCommand1\n\n\n" >> $firstDSpath/INSTALLATION
+            ((ldd++))
+            ((ldss++))
+            ((adm++))
+            ((htp++))
+            ((htps++))             
+        done
+
+  #create server ID for each server
+  adm=$admm
+  for (( i=0; i<$twoDs; i++ ))
+        do
+             setupCommand2="$dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop \ \n--hostName ${dsName}${i}$domain \ \n--adminConnectorPort $adm \ \n--bindDN cn=Directory Manager \ \n--bindPassword $installationPassword \ \n--set server-id:${sID} \ \n--trustAll \ \n--no-prompt"  
+
+             printf "$setupCommand2\n\n\n" >> $firstDSpath/INSTALLATION
+             ((adm++))
+             ((sID++))
+        done
+
+  #create rs only server
+  setupCommand3="$rsAlonePath${firstSrv}/opendj/./setup replication-server \ \n--rootUserDN cn=Directory Manager \ \n--rootUserPassword $installationPassword \ \n--hostName ${rsName}${firstSrv}$domain \ \n--adminConnectorPort $adm \ \n--replicationPort $rPort \n--acceptLicense"
+
+  printf "$setupCommand3\n\n\n" >> $firstDSpath/INSTALLATION
+  replAdminPort=$adm
+
+  #configure the replication
+  adm=$admm
+  for (( i=0; i<$twoDs; i++ ))
+    do
+        setupCommand4="${dsAlonePath}${i}/opendj/bin/./dsreplication configure \ \n--adminUID admin \ \n--adminPassword $installationPassword \ \n--baseDN $bDN \ \n--host1 ${dsName}${i}${domain} \ \n--port1 $adm \ \n--bindDN1 cn=Directory Manager \ \n--bindPassword1 $installationPassword \ \n--noReplicationServer1 \ \n--host2 ${rsName}${firstSrv}$domain \ \n--port2 ${replAdminPort} \ \n--bindDN2 cn=Directory Manager \ \n--bindPassword2 $installationPassword \ \n--replicationPort2 ${repPort} \ \n--onlyReplicationServer2 \ \n--trustAll \ \n--no-prompt"
+
+        printf "$setupCommand4\n\n\n" >> $firstDSpath/INSTALLATION
+        ((adm++))
+    done
+
+
+  #initialise the replication
+  setupCommand4="${dsAlonePath}${firstSrv}/opendj/bin/./dsreplication initialize-all \ \n--adminUID admin \ \n--adminPassword $installationPassword \ \n--baseDN $bDN \ \n--hostName ${dsName}${firstSrv}${domain} \ \n--port $admm \ \n--trustAll \ \n--no-prompt"
+
+  printf "$setupCommand4\n\n\n" >> $firstDSpath/INSTALLATION
+  printf "\n Finished creating the text..\n"
+
+}
+
+
 #$firstDSbinPath $dsOnlyHostName $dsAlonePath
 exStatusCommand()
 {   local srvBinPath=$1
@@ -866,6 +952,7 @@ createStartStop()
     printf "$command" >> $sPath/srvDS.sh
     chmod 755 $sPath/srvDS.sh
 }
+
 
 
 # Execute setup for normal ds rs servers version 7x
@@ -997,7 +1084,7 @@ executeStandAlone7xSetup()
   if [[ $dsFamily -eq 2 && $rsNum -gt 0 ]]; then
         for (( i=0; i<$rsNum; i++ ))
                 do
-                    ${rsAlonePath}${i}/opendj/./setup --serverId ${rsID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort $repp ${bootStrapServers} --acceptLicense 2>&1 >/dev/null &
+                    ${rsAlonePath}${i}/opendj/./setup --serverId ${rsID}${i} --deploymentKey $depKey --deploymentKeyPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${rsOnlyHName}${i}${domain} --adminConnectorPort $adm --replicationPort $rep ${bootStrapServers} --acceptLicense 2>&1 >/dev/null &
                     process_id=$!
                     progressBar2 1 $process_id
                     ((adm++))
@@ -1142,6 +1229,72 @@ execute656xSetup()
 
 
 
+executeStandAlone65xSetup(){
+  ldd=$1
+  ldss=$2
+  admm=$3
+  htp=$4
+  htps=$5
+  sID=$6
+  rPort=$7
+  dsName=$8
+  rsName=$9
+
+  local firstSrv=0
+  local adm=$admm
+  local repPort=$rPort
+  local twoDs=2
+ 
+  selectedDN $dsProfile
+  
+  printf "executing DS ./setup command for DS stand alone 6.5.x..\n"
+  #create servers
+  for (( i=0; i<$twoDs; i++ ))
+        do
+            $dsAlonePath${i}/opendj/./setup directory-server --rootUserDN cn=Directory Manager --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsName}${i}$domain --ldapPort $ldd --enableStartTLS --ldapsPort $ldss --httpPort $htp --httpsPort $htps --adminConnectorPort $adm ${installationProfile} --acceptLicense
+            process_id=$!
+            progressBar2 1 $process_id
+            ((ldd++))
+            ((ldss++))
+            ((adm++))
+            ((htp++))
+            ((htps++))
+            setupMessage     
+        done
+
+  #create server ID for each server
+  printf "\n Preparing server IDs replication configuration and replication, please wait..\n"
+  adm=$admm
+  for (( i=0; i<$twoDs; i++ ))
+        do
+             $dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop --hostName ${dsName}${i}$domain --adminConnectorPort $adm --bindDN cn=Directory Manager --bindPassword $installationPassword --set server-id:${sID} --trustAll --no-prompt
+
+             ((adm++))
+             ((sID++))
+        done
+
+  #create rs only server
+  $rsAlonePath${firstSrv}/opendj/./setup replication-server --rootUserDN cn=Directory Manager --rootUserPassword $installationPassword --hostName ${rsName}${firstSrv}$domain --adminConnectorPort $adm --replicationPort $rPort --acceptLicense
+  process_id=$!
+  progressBar2 1 $process_id
+  setupMessage
+  replAdminPort=$adm
+
+  #configure the replication
+  adm=$admm
+  for (( i=0; i<$twoDs; i++ ))
+    do
+        ${dsAlonePath}${i}/opendj/bin/./dsreplication configure --adminUID admin --adminPassword $installationPassword --baseDN $bDN --host1 ${dsName}${i}${domain} --port1 $adm --bindDN1 cn=Directory Manager --bindPassword1 $installationPassword --noReplicationServer1 --host2 ${rsName}${firstSrv}$domain --port2 ${replAdminPort} --bindDN2 cn=Directory Manager --bindPassword2 $installationPassword --replicationPort2 ${repPort} --onlyReplicationServer2 --trustAll --no-prompt
+        process_id=$!
+        wait $process_id
+        ((adm++))
+    done
+
+
+  #initialise the replication
+  ${dsAlonePath}${firstSrv}/opendj/bin/./dsreplication initialize-all --adminUID admin --adminPassword $installationPassword --baseDN $bDN --hostName ${dsName}${firstSrv}${domain} --port $admm --trustAll --no-prompt
+}
+
 
 
 
@@ -1175,7 +1328,7 @@ printf "************************************************************************
 printf "******************************************************************************************\n"
 printf "                            Please select DS family\n"
 printf "******************************************************************************************\n"
-printf "1. DS 5.x - DS 6.x\n"
+printf "1. DS 6.5.x\n"
 printf "2. DS 7.0.x - DS 7.1.x\n"
 printf "3. DS 7.2.x - DS 7.3x and up\n"
 printf "Enter your choise: "
@@ -1186,7 +1339,7 @@ do
 	clear
   printf "  Please select DS family\n"
   printf "*****************************\n"
-  printf "1. DS 5.x - DS 6.x\n"
+  printf "1. DS 6.5.x\n"
   printf "2. DS 7.0.x - DS 7.1.x\n"
   printf "3. DS 7.2.x - DS 7.3x and up\n"
   printf "Enter your choise: "
@@ -1198,40 +1351,28 @@ clear
 case "$dsFamily" in
 1) printf "Please select DS version\n"
    printf "************************\n"
-   printf "1. DS 5.0.0\n"
-   printf "2. DS 5.5.0\n"
-   printf "3. DS 5.5.1\n"
-   printf "4. DS 5.5.2\n"
-   printf "5. DS 5.5.3\n"
-   printf "6. DS 6.0.0\n"
-   printf "7. DS 6.5.0\n"
-   printf "8. DS 6.5.1\n"
-   printf "9. DS 6.5.2\n"
-   printf "10. DS 6.5.3\n"
-   printf "11. DS 6.5.4\n"
-   printf "12. DS 6.5.5\n"
-   printf "13. DS 6.5.6\n"
+   printf "1. DS 6.5.0\n"
+   printf "2. DS 6.5.1\n"
+   printf "3. DS 6.5.2\n"
+   printf "4. DS 6.5.3\n"
+   printf "5. DS 6.5.4\n"
+   printf "6. DS 6.5.5\n"
+   printf "7. DS 6.5.6\n"
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-   while [[ $dsVersion -lt 1 && $dsVersion -gt 13 ]]
+   while [[ $dsVersion -lt 1 && $dsVersion -gt 7 ]]
    do
       clear
       printf "Please select DS version\n"
       printf "*************************\n"
-      printf "1. DS 5.0.0\n"
-      printf "2. DS 5.5.0\n"
-      printf "3. DS 5.5.1\n"
-      printf "4. DS 5.5.2\n"
-      printf "5. DS 5.5.3\n"
-      printf "6. DS 6.0.0\n"
-      printf "7. DS 6.5.0\n"
-      printf "8. DS 6.5.1\n"
-      printf "9. DS 6.5.2\n"
-      printf "10. DS 6.5.3\n"
-      printf "11. DS 6.5.4\n"
-      printf "12. DS 6.5.5\n"
-      printf "13. DS 6.5.6\n"
+      printf "1. DS 6.5.0\n"
+      printf "2. DS 6.5.1\n"
+      printf "3. DS 6.5.2\n"
+      printf "4. DS 6.5.3\n"
+      printf "5. DS 6.5.4\n"
+      printf "6. DS 6.5.5\n"
+      printf "7. DS 6.5.6\n"
       printf "Enter your choise: "
       read dsVersion
    done
@@ -1327,8 +1468,7 @@ done
 
 clear
 
-if [[ $standAlone -eq 2 ]]; then
-  typeOfInstallation=2  
+if [[ $standAlone -eq 2 && $dsFamily -gt 1 ]]; then 
   printf " Select number of Servers\n"
   printf "*****************************\n"
   printf "Number of stand alone DS: "
@@ -1340,7 +1480,6 @@ if [[ $standAlone -eq 2 ]]; then
     read dsNumber
   done
 
-
   printf "Number of stand alone RS: "
   read rsNumber
   while [[ $rsNumber -lt 0 || $rsNumber -gt 8 ]]
@@ -1351,10 +1490,17 @@ if [[ $standAlone -eq 2 ]]; then
   done
 fi
 
+if [[ $standAlone -eq 2 && $dsFamily -eq 1 ]]; then 
+    printf "This installation is going to install 2 stand alone DS servers and one RS alone\n"
+    printf "press Enter to continue:"
+    dsNumber=2
+    rsNumber=1
+    read dummy
+fi
+
 clear
 
 if [[ $standAlone -eq 1 ]]; then
-
   printf "Select number of servers (1 - 8)\n"
   printf "No: "
   read noOfServers
@@ -1376,38 +1522,39 @@ if [[ $standAlone -eq 1 ]]; then
 fi
 
 
-if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]] || [[ $dsFamily -gt 1 ]]; then
-    if [[ $dsNumber -gt 0 || $noOfServers -gt 0 ]]; then
-        typeOfInstallation=1  
+#if [[ $dsFamily -eq 1 && $dsVersion -gt 6 ]]; then
+if [[ $dsNumber -gt 0 || $noOfServers -gt 0 ]]; then
+    printf "                 Please select profile\n"
+    printf "***********************************************************\n"
+    printf "1. Evaluation\n"
+    printf "2. AM CTS (AM reaper manages all token expiration)\n"
+    printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
+    printf "4. AM CTS (DS manages all token expiration)\n"
+    printf "5. AM Configuration\n"
+    printf "6. AM identities\n"
+    printf "7. IDM Repository\n"
+    printf "Enter your choise: "
+    read dsProfile
+    printf "\n"
+    while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
+    do
+	    clear
         printf "                 Please select profile\n"
         printf "***********************************************************\n"
-        printf "1. Evaluation\n"
-        printf "2. AM CTS (AM reaper manages all token expiration)\n"
-        printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
-        printf "4. AM CTS (DS manages all token expiration)\n"
-        printf "5. AM Configuration\n"
-        printf "6. AM identities\n"
+	    printf "1. Evaluation\n"
+	    printf "2. AM CTS (AM reaper manages all token expiration)\n"
+	    printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
+	    printf "4. AM CTS (DS manages all token expiration)\n"
+	    printf "5. AM Configuration\n"
+	    printf "6. AM identities\n"
         printf "7. IDM Repository\n"
-        printf "Enter your choise: "
+	    printf "Enter your choise: "
         read dsProfile
-        printf "\n"
-        while [[ $dsProfile -lt 1 && $dsProfile -gt 7 ]]
-        do
-	        clear
-            printf "                 Please select profile\n"
-            printf "***********************************************************\n"
-	        printf "1. Evaluation\n"
-	        printf "2. AM CTS (AM reaper manages all token expiration)\n"
-	        printf "3. AM CTS (AM reaper manages only SESSION token expiration)\n"
-	        printf "4. AM CTS (DS manages all token expiration)\n"
-	        printf "5. AM Configuration\n"
-	        printf "6. AM identities\n"
-            printf "7. IDM Repository\n"
-	        printf "Enter your choise: "
-            read dsProfile
-        done
-    fi    
-fi
+    done
+fi    
+#fi
+
+
 
 
 
@@ -1509,7 +1656,7 @@ if [[ $dsFamily -gt 1 && $standAlone -eq 1 ]]; then
 fi
 
 
-#Installation of stand alone Ds and RS servers
+#Installation of stand alone Ds 7x and RS 7x servers
 #
 if [[ $dsFamily -gt 1 && $standAlone -eq 2 ]]; then
     
@@ -1647,7 +1794,7 @@ fi
 
 # Installation of normal DS/RS servers at version DS 6.5.x
 # 
-if [[ $dsFamily -eq 1 && dsVersion -gt 6 ]]; then
+if [[ $dsFamily -eq 1 && $standAlone -eq 1 ]]; then
 
     printf "\n Installation of normal DS/RS servers at version DS 6.5.x \n"
 
@@ -1731,6 +1878,116 @@ if [[ $dsFamily -eq 1 && dsVersion -gt 6 ]]; then
 fi
 
 
+#Installation of stand alone Ds 6.5.x and RS 6.5.x servers
+#
+dsNumber=2
+rsNumber=1
+if [[ $dsFamily -eq 1 && $standAlone -eq 2 ]]; then
+    
+    printf "\n Installation of stand alone Ds 6.5.x and RS 6.5.x servers \n"
+
+    # Call function to check the product ds Family and Version
+    #
+    selectedFamilyVersion $dsFamily $dsVersion
+    # check this function
+
+
+    # Call function to select profile
+    #
+    if [[ $dsNumber -gt 0 ]]; then
+        selectProfile $dsProfile
+    fi
+
+
+    # Call function to check for Java environment
+    #
+    checkJava
+
+
+    # Call function to check if netstat/lsof is installed and then check all the ports to avoid conflicts..
+    #
+    # netstat -V &>/dev/null
+    checkLsof
+
+
+    # checkPorts for stand alone DS and RS servers
+    #
+    if [[ $dsNumber -gt 0 ]]; then
+
+        for j in $ldPort $ldsPort $admPort $hPort $hsPort
+        do
+            printf "Checking protocol port: $j\n"
+            checkPorts $j $dsNumber
+        done
+    fi
+
+    adPort=$((admPort+2))
+    if [[ $rsNumber -gt 0 ]]; then
+
+        for j in $adPort $replPort
+        do
+            printf "Checking protocol port: $j\n"
+            checkPorts $j $rsNumber
+        done
+    fi
+
+    # Call function to check for existing directories
+    # and create new directories
+    #
+    checkDirectories $dsAlonePath $dsNumber
+    checkDirectories $rsAlonePath $rsNumber
+
+    # Call function to check if unzip utility exists
+    #
+    checkUnzip
+
+
+    # Call function to check if DS-7.x.x.zip file exist on the directory
+    #
+    checkFileZip $selectedVersion
+
+
+    # Unzip files to directories
+    #
+    unzipDSRSsetupFile $dsAlonePath $dsNumber
+    unzipDSRSsetupFile $rsAlonePath $rsNumber
+
+
+    # Insert hostNames into /etc/hosts file
+    #
+    if [[ dsNumber -gt 0 ]]; then
+       insertHostNames $dsOnlyHostName $dsNumber
+    fi
+
+    if [[ rsNumber -gt 0 ]]; then
+        insertHostNames $rsOnlyHostName $rsNumber
+    fi
+
+    # Call function to create installation text for ds rs only servers
+    #
+    installation65xStandAloneText $ldPort $ldsPort $admPort $hPort $hsPort $numericServerID $replPort $dsOnlyHostName $rsOnlyHostName
+
+
+    # Call function to excute installation for stand alone ds rs only servers
+    #
+    executeStandAlone65xSetup $ldPort $ldsPort $admPort $hPort $hsPort $numericServerID $replPort $dsOnlyHostName $rsOnlyHostName
+
+
+    # Execute status command
+    #
+    exStatusCommand $firstDSbinPath $dsOnlyHostName $firstDSpath
+
+
+    # Create start stop command for all servers
+    #
+    createStartStop $dsNumber $dsAlonePath $firstDSpath
+    createStartStop $rsNumber $rsAlonePath $firstRSpath
+
+
+    # End of installation message
+    #
+    endOfInstallation
+fi
 
 
 
