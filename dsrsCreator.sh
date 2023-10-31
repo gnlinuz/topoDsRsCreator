@@ -891,7 +891,7 @@ installation65xStandAloneText()
   adm=$admm
   for (( i=0; i<$twoDs; i++ ))
         do
-             setupCommand2="$dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop \ \n--hostName ${dsName}${i}$domain \ \n--adminConnectorPort $adm \ \n--bindDN cn=Directory Manager \ \n--bindPassword $installationPassword \ \n--set server-id:${sID} \ \n--trustAll \ \n--no-prompt"  
+             setupCommand2="$dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop \ \n--hostName ${dsName}${i}$domain \ \n--port $adm \ \n--bindDN cn=Directory Manager \ \n--bindPassword $installationPassword \ \n--set server-id:${sID} \ \n--trustAll \ \n--no-prompt"  
 
              printf "$setupCommand2\n\n\n" >> $firstDSpath/INSTALLATION
              ((adm++))
@@ -1251,7 +1251,7 @@ executeStandAlone65xSetup(){
   #create servers
   for (( i=0; i<$twoDs; i++ ))
         do
-            $dsAlonePath${i}/opendj/./setup directory-server --rootUserDN cn=Directory Manager --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsName}${i}$domain --ldapPort $ldd --enableStartTLS --ldapsPort $ldss --httpPort $htp --httpsPort $htps --adminConnectorPort $adm ${installationProfile} --acceptLicense
+            $dsAlonePath${i}/opendj/./setup directory-server --rootUserDN 'cn=Directory Manager' --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${dsName}${i}$domain --ldapPort $ldd --enableStartTLS --ldapsPort $ldss --httpPort $htp --httpsPort $htps --adminConnectorPort $adm ${installationProfile} --acceptLicense
             process_id=$!
             progressBar2 1 $process_id
             ((ldd++))
@@ -1267,14 +1267,14 @@ executeStandAlone65xSetup(){
   adm=$admm
   for (( i=0; i<$twoDs; i++ ))
         do
-             $dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop --hostName ${dsName}${i}$domain --adminConnectorPort $adm --bindDN cn=Directory Manager --bindPassword $installationPassword --set server-id:${sID} --trustAll --no-prompt
+             $dsAlonePath${i}/opendj/bin/./dsconfig set-global-configuration-prop --hostName ${dsName}${i}$domain --port $adm --bindDN 'cn=Directory Manager' --bindPassword $installationPassword --set server-id:${sID} --trustAll --no-prompt
 
              ((adm++))
              ((sID++))
         done
 
   #create rs only server
-  $rsAlonePath${firstSrv}/opendj/./setup replication-server --rootUserDN cn=Directory Manager --rootUserPassword $installationPassword --hostName ${rsName}${firstSrv}$domain --adminConnectorPort $adm --replicationPort $rPort --acceptLicense
+  $rsAlonePath${firstSrv}/opendj/./setup replication-server --rootUserDN 'cn=Directory Manager' --rootUserPassword $installationPassword --hostName ${rsName}${firstSrv}$domain --adminConnectorPort $adm --replicationPort $rPort --acceptLicense
   process_id=$!
   progressBar2 1 $process_id
   setupMessage
@@ -1284,7 +1284,7 @@ executeStandAlone65xSetup(){
   adm=$admm
   for (( i=0; i<$twoDs; i++ ))
     do
-        ${dsAlonePath}${i}/opendj/bin/./dsreplication configure --adminUID admin --adminPassword $installationPassword --baseDN $bDN --host1 ${dsName}${i}${domain} --port1 $adm --bindDN1 cn=Directory Manager --bindPassword1 $installationPassword --noReplicationServer1 --host2 ${rsName}${firstSrv}$domain --port2 ${replAdminPort} --bindDN2 cn=Directory Manager --bindPassword2 $installationPassword --replicationPort2 ${repPort} --onlyReplicationServer2 --trustAll --no-prompt
+        ${dsAlonePath}${i}/opendj/bin/./dsreplication configure --adminUID admin --adminPassword $installationPassword --baseDN $bDN --host1 ${dsName}${i}${domain} --port1 $adm --bindDN1 'cn=Directory Manager' --bindPassword1 $installationPassword --noReplicationServer1 --host2 ${rsName}${firstSrv}$domain --port2 ${replAdminPort} --bindDN2 'cn=Directory Manager' --bindPassword2 $installationPassword --replicationPort2 ${repPort} --onlyReplicationServer2 --trustAll --no-prompt
         process_id=$!
         wait $process_id
         ((adm++))
@@ -1975,7 +1975,8 @@ if [[ $dsFamily -eq 1 && $standAlone -eq 2 ]]; then
 
     # Execute status command
     #
-    exStatusCommand $firstDSbinPath $dsOnlyHostName $firstDSpath
+    #exStatusCommand $firstDSbinPath $dsOnlyHostName $firstDSpath
+    replicationStatus65x $firstDSbinPath $dsOnlyHostName
 
 
     # Create start stop command for all servers
