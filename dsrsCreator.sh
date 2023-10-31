@@ -242,6 +242,8 @@ selectedFamilyVersion()
         ;;
      8) selectedVersion=DS-7.3.3.zip
         ;;
+     9) selectedVersion=DS-7.4.0.zip
+        ;;   
      *)
    esac
  fi
@@ -930,8 +932,9 @@ exStatusCommand()
     local hName=$2
     local sPath=$3
     local num=0
+    #$srvBinPath./dsrepl status --showGroups --showReplicas --hostname $hName${num}$domain --port $admPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $sPath/config/keystore --trustStorePassword:file $sPath/config/keystore.pin --no-prompt
     $srvBinPath./dsrepl status --showGroups --showReplicas --hostname $hName${num}$domain --port $admPort --bindDN "uid=admin" --bindPassword $installationPassword --trustStorePath $sPath/config/keystore --trustStorePassword:file $sPath/config/keystore.pin --no-prompt
-}
+}   
 
 
 # The creation is on the wrong path
@@ -994,7 +997,7 @@ execute7xSetup()
   if [ $dsFamily -eq 3 ];then
     for (( i=0; i<$noOfServers; i++ ))
       do
-        echo "${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &">TEST.TXT
+        #echo "${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &">TEST.TXT
         ${destPath}${i}/opendj/./setup --serverId ${srvID}${i} --deploymentId $depKey --deploymentIdPassword $installationPassword --rootUserDN uid=admin --rootUserPassword $installationPassword --monitorUserPassword $installationPassword --hostName ${hostName}${i}${domain} --adminConnectorPort $adm --ldapPort $ld --enableStartTLS --ldapsPort $lds --httpsPort $htps --replicationPort ${rep} ${bootStrapServers} ${installationProfile} --acceptLicense 2>&1 >/dev/null &
         process_id=$!
         progressBar2 1 $process_id
@@ -1330,7 +1333,7 @@ printf "                            Please select DS family\n"
 printf "******************************************************************************************\n"
 printf "1. DS 6.5.x\n"
 printf "2. DS 7.0.x - DS 7.1.x\n"
-printf "3. DS 7.2.x - DS 7.3x and up\n"
+printf "3. DS 7.2.x - DS 7.3x - DS 7.4.0\n"
 printf "Enter your choise: "
 read dsFamily
 printf "\n"
@@ -1341,7 +1344,7 @@ do
   printf "*****************************\n"
   printf "1. DS 6.5.x\n"
   printf "2. DS 7.0.x - DS 7.1.x\n"
-  printf "3. DS 7.2.x - DS 7.3x and up\n"
+  printf "3. DS 7.2.x - DS 7.3x - DS 7.4.0\n"
   printf "Enter your choise: "
   read dsFamily
 done
@@ -1421,10 +1424,11 @@ case "$dsFamily" in
    printf "6. DS 7.3.1\n"
    printf "7. DS 7.3.2\n"
    printf "8. DS 7.3.3\n"
+   printf "9. DS 7.4.0\n"
    printf "Enter your choise: "
    read dsVersion
    printf "\n"
-   while [[ $dsVersion -lt 1 && $dsVersion -gt 8 ]]
+   while [[ $dsVersion -lt 1 && $dsVersion -gt 9 ]]
    do
       clear
       printf "Please select DS version\n"
@@ -1437,6 +1441,7 @@ case "$dsFamily" in
       printf "6. DS 7.3.1\n"
       printf "7. DS 7.3.2\n"
       printf "8. DS 7.3.3\n"
+      printf "9. DS 7.4.0\n"
       read dsVersion
   done
       ;;
@@ -1642,7 +1647,7 @@ if [[ $dsFamily -gt 1 && $standAlone -eq 1 ]]; then
 
     # Execute status command
     #
-    exStatusCommand $binPath $hostName $destPath
+    exStatusCommand $binPath $hostName $setupPath
 
     # Create start stop command for all servers
     #
