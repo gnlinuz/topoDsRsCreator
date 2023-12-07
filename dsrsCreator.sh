@@ -25,6 +25,10 @@ clear
 #Destination path will be in the format ~/dsrsTopo1, ~/dsrsTopo2,
 destPath=~/dsrsTopo
 
+#Path of the folder that hold all ForeRock binary zip files
+#
+binFolder=/Users/george.nikolaidis/Downloads/ForgerockBins
+
 #Path for stand alone DS RS servers ex. dsrsTopoDS1 or dsrsTopoRS1 etc
 #
 dsAlonePath=${destPath}DS
@@ -47,7 +51,7 @@ rsID=RS
 numericServerID=100
 
 #password to be used for uid=admin for uid=Monitor cn=Directory Manager
-installationPassword=DrowssaP
+installationPassword=Password1
 export installationPassword
 
 #installationProfile=ds-evaluation
@@ -382,7 +386,7 @@ checkFileZip()
 {
   zipFile=$1
   printf "Checking for zip file..\n"
-  if [ -f "$zipFile" ];then
+  if [[ -f "$zipFile" || -f "${binFolder}/${zipFile}" ]] ;then
           printf "found, $zipFile..ok\n"
   else
           printf "Can't find $zipFile file, please make sure to include\n"
@@ -427,6 +431,9 @@ unzipDSRSsetupFile()
     local destinationPath=$1
     local numberOfServer=$2
     printf "Unzipping files to directories...\n"
+    if [[ -f "${binFolder}/${selectedVersion}" ]]; then
+        selectedVersion=${binFolder}/${selectedVersion}
+    fi    
     for (( dir=0; dir<$numberOfServer; dir++ ))
     do
         unzip $selectedVersion -d $destinationPath${dir} 2>&1 >/dev/null &
@@ -513,7 +520,11 @@ createDepKey()
   theBinPath=$1
   theSetupPath=$2 
   printf "creating DEPLOYMENT-ID...please wait it might take some time..\n"
-  $theBinPath/dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
+  printf "The path for the bin dir is: $theBinPath\n"
+  printf "The setup path is: $theSetupPath\n"
+  $theBinPath./dskeymgr create-deployment-id --deploymentIdPassword $installationPassword > $theSetupPath/DEPLOYMENT_KEY
+  process_id=$!
+  progressBar2 1 $process_id
   commandResult=$?
   printMsg $commandResult
   exportKey
@@ -1615,6 +1626,9 @@ if [[ $dsFamily -gt 1 && $standAlone -eq 1 ]]; then
     printf "\n"
     printf "Check for number of servers are: $noOfServers"
     printf "\n"
+    if [[ -f "${binFolder}/${selectedVersion}" ]]; then
+        selectedVersion=${binFolder}/${selectedVersion}
+    fi 
     for (( dir=0; dir<$noOfServers; dir++ ))
     do
         unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
@@ -1848,6 +1862,9 @@ if [[ $dsFamily -eq 1 && $standAlone -eq 1 ]]; then
     printf "\n"
     printf "Check for number of servers are: $noOfServers"
     printf "\n"
+    if [[ -f "${binFolder}/${selectedVersion}" ]]; then
+        selectedVersion=${binFolder}/${selectedVersion}
+    fi 
     for (( dir=0; dir<$noOfServers; dir++ ))
     do
         unzip $selectedVersion -d $destPath${dir} 2>&1 >/dev/null &
